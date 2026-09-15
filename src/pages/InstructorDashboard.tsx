@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, SessionResult } from '../types';
 import { MOCK_SESSIONS, MOCK_COHORT_STATS } from '../api/sessions';
 import { TrajectoryReplay3D } from '../components/TrajectoryReplay3D';
+import { TraineesPage } from './TraineesPage';
+import { SessionsPage } from './SessionsPage';
+import { PerformanceAnalyticsPage } from './PerformanceAnalyticsPage';
+import { ReportsPage } from './ReportsPage';
+import { InstructorProfilePage } from './InstructorProfilePage';
+import { SessionReviewDetail } from '../components/SessionReviewDetail';
+import { dataService } from '../services/dataService';
 import { 
   Users, 
   TrendingUp, 
@@ -17,7 +24,8 @@ import {
   RotateCcw,
   ChevronRight,
   FileCheck,
-  FileX
+  FileX,
+  FileText
 } from 'lucide-react';
 
 interface InstructorDashboardProps {
@@ -33,16 +41,31 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   onTabChange,
   onNavigatePage,
 }) => {
+  const [sessionsList, setSessionsList] = useState<SessionResult[]>([]);
   // Selected Trainee for Audit Focus sidebar (Default to Dr. K. Chen for immediate review, or Dr. M. Alexeev)
-  const [selectedAuditSession, setSelectedAuditSession] = useState<SessionResult>(
-    MOCK_SESSIONS.find((s) => s.id === 'sess-883') || MOCK_SESSIONS[1]
-  );
+  const [selectedAuditSession, setSelectedAuditSession] = useState<SessionResult | null>(null);
   const [isReplayModalOpen, setIsReplayModalOpen] = useState<boolean>(false);
+  const [reviewingSession, setReviewingSession] = useState<SessionResult | null>(null);
   const [facultyNote, setFacultyNote] = useState<string>(
-    selectedAuditSession.facultyFeedback ||
-      'Trainee demonstrated steep 49.2° needle trajectory on narrow adolescent anatomy. Excessive downward angle created posterior IJV wall puncture hazard, bringing needle tip within 4.1mm of common carotid artery. Trainee must complete 3 supervised phantom sessions focusing on shallow 30°-35° probe-needle alignment prior to next clinical rotation.'
+    'Trainee demonstrated steep 49.2° needle trajectory on narrow adolescent anatomy. Excessive downward angle created posterior IJV wall puncture hazard, bringing needle tip within 4.1mm of common carotid artery. Trainee must complete 3 supervised phantom sessions focusing on shallow 30°-35° probe-needle alignment prior to next clinical rotation.'
   );
   const [feedbackSuccess, setFeedbackSuccess] = useState<string>('');
+
+  const loadSessions = async () => {
+    const list = await dataService.getSessions();
+    setSessionsList(list);
+    if (!selectedAuditSession && list.length > 0) {
+      const defaultAudit = list.find((s) => s.id === 'sess-883') || list[1] || list[0];
+      setSelectedAuditSession(defaultAudit);
+      if (defaultAudit.facultyFeedback) {
+        setFacultyNote(defaultAudit.facultyFeedback);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, [activeTab]);
 
   const handleSelectAudit = (session: SessionResult) => {
     setSelectedAuditSession(session);
@@ -55,15 +78,92 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     }
   };
 
-  const handleSignOff = () => {
-    setFeedbackSuccess('Session successfully validated and signed off in residency registry.');
-    setTimeout(() => setFeedbackSuccess(''), 4000);
+  const handleSignOff = async () => {
+    if (!selectedAuditSession) return;
+    const updated = await dataService.updateSessionStatus(selectedAuditSession.id, 'validated', facultyNote);
+    if (updated) {
+      setSelectedAuditSession(updated);
+      setFeedbackSuccess('Session successfully validated and signed off in residency registry.');
+      loadSessions();
+      setTimeout(() => setFeedbackSuccess(''), 4000);
+    }
   };
 
-  const handleRemediate = () => {
-    setFeedbackSuccess('Mandatory remediation assigned. Notification dispatched to Dr. K. Chen.');
-    setTimeout(() => setFeedbackSuccess(''), 4000);
+  const handleRemediate = async () => {
+    if (!selectedAuditSession) return;
+    const updated = await dataService.updateSessionStatus(selectedAuditSession.id, 'flagged', facultyNote);
+    if (updated) {
+      setSelectedAuditSession(updated);
+      setFeedbackSuccess(`Mandatory remediation assigned. Notification dispatched to ${selectedAuditSession.traineeName}.`);
+      loadSessions();
+      setTimeout(() => setFeedbackSuccess(''), 4000);
+    }
   };
+
+  // If viewing a detailed session audit
+  if (reviewingSession) {
+    return (
+      <SessionReviewDetail
+        session={reviewingSession}
+        onBack={() => setReviewingSession(null)}
+        onSessionUpdated={(updated) => {
+          setReviewingSession(updated);
+          setSelectedAuditSession(updated);
+          loadSessions();
+        }}
+      />
+    );
+  }
+
+  // TAB ROUTING FOR INSTRUCTOR NAVIGATION
+  if (activeTab === 'roster' || activeTab === 'trainees') {
+    return (
+      <TraineesPage
+        currentUser={currentUser}
+        onNavigatePage={onNavigatePage}
+        onSelectSessionForReview={(session) => setReviewingSession(session)}
+      />
+    );
+  }
+
+  if (activeTab === 'audits' || activeTab === 'sessions') {
+    return (
+      <SessionsPage
+        currentUser={currentUser}
+        onNavigatePage={onNavigatePage}
+      />
+    );
+  }
+
+  if (activeTab === 'analytics') {
+    return (
+      <PerformanceAnalyticsPage
+        currentUser={currentUser}
+        onNavigatePage={onNavigatePage}
+      />
+    );
+  }
+
+  if (activeTab === 'reports') {
+    return (
+      <ReportsPage
+        currentUser={currentUser}
+        onNavigatePage={onNavigatePage}
+      />
+    );
+  }
+
+  if (activeTab === 'profile') {
+    return (
+      <InstructorProfilePage
+        currentUser={currentUser}
+        onNavigateTab={onTabChange}
+        onNavigatePage={onNavigatePage}
+      />
+    );
+  }
+
+  const currentAudit = selectedAuditSession || sessionsList[0] || ({} as SessionResult);
 
   return (
     <div className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-6 space-y-6">
@@ -241,8 +341,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {MOCK_SESSIONS.map((session) => {
-                    const isSelected = selectedAuditSession.id === session.id;
+                  {(sessionsList.length > 0 ? sessionsList : MOCK_SESSIONS).map((session) => {
+                    const isSelected = (currentAudit?.id || '') === session.id;
                     return (
                       <tr
                         key={session.id}
@@ -297,17 +397,31 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectAudit(session);
-                              setIsReplayModalOpen(true);
-                            }}
-                            className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] inline-flex items-center space-x-1"
-                          >
-                            <Play className="w-3 h-3 text-cvc-cyan" />
-                            <span>3D Replay</span>
-                          </button>
+                          <div className="flex items-center justify-end space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReviewingSession(session);
+                              }}
+                              className="px-2 py-1 rounded bg-cvc-purple/80 hover:bg-cvc-purple text-white text-[10px] inline-flex items-center space-x-1 cursor-pointer transition shadow-glow-purple"
+                              title="Full Clinical Audit"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Audit</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectAudit(session);
+                                setIsReplayModalOpen(true);
+                              }}
+                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] inline-flex items-center space-x-1 cursor-pointer transition"
+                              title="3D Trajectory Replay"
+                            >
+                              <Play className="w-3 h-3 text-cvc-cyan" />
+                              <span>3D</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -327,7 +441,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <div className="flex items-center space-x-2">
                   <ShieldAlert
                     className={`w-4 h-4 ${
-                      selectedAuditSession.flagged ? 'text-cvc-crimson' : 'text-emerald-400'
+                      currentAudit.flagged ? 'text-cvc-crimson' : 'text-emerald-400'
                     }`}
                   />
                   <h3 className="font-display font-bold text-xs text-white uppercase tracking-wider">
@@ -336,12 +450,12 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 </div>
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                    selectedAuditSession.flagged
+                    currentAudit.flagged
                       ? 'bg-red-500/20 text-cvc-crimson border border-red-500/30'
                       : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                   }`}
                 >
-                  {selectedAuditSession.flagged ? 'FLAGGED AUDIT' : 'VALIDATED'}
+                  {currentAudit.flagged ? 'FLAGGED AUDIT' : 'VALIDATED'}
                 </span>
               </div>
 
@@ -350,15 +464,15 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="font-display font-bold text-sm text-white">
-                      {selectedAuditSession.traineeName}
+                      {currentAudit.traineeName}
                     </h4>
                     <p className="text-[11px] font-mono text-cvc-textMuted">
-                      {selectedAuditSession.traineePgy} • {selectedAuditSession.sessionNumber}
+                      {currentAudit.traineePgy} • {currentAudit.sessionNumber}
                     </p>
                   </div>
                   <div className="text-right">
                     <span className="font-display text-xl font-black text-white">
-                      {selectedAuditSession.score}
+                      {currentAudit.score}
                     </span>
                     <span className="text-[10px] text-white/50 block font-mono">/ 100 SCORE</span>
                   </div>
@@ -369,22 +483,22 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     <span className="text-white/40 block">ENTRY ANGLE</span>
                     <span
                       className={`font-bold ${
-                        selectedAuditSession.entryPitchDeg > 45 ? 'text-cvc-crimson' : 'text-white'
+                        (currentAudit.entryPitchDeg || 0) > 45 ? 'text-cvc-crimson' : 'text-white'
                       }`}
                     >
-                      {selectedAuditSession.entryPitchDeg}° (Target 35°-45°)
+                      {currentAudit.entryPitchDeg}° (Target 35°-45°)
                     </span>
                   </div>
                   <div>
                     <span className="text-white/40 block">CAROTID PROXIMITY</span>
                     <span
                       className={`font-bold ${
-                        selectedAuditSession.carotidClearanceMm < 5.0
+                        (currentAudit.carotidClearanceMm || 0) < 5.0
                           ? 'text-cvc-crimson'
                           : 'text-emerald-400'
                       }`}
                     >
-                      {selectedAuditSession.carotidClearanceMm} mm (Min 5.0mm)
+                      {currentAudit.carotidClearanceMm} mm (Min 5.0mm)
                     </span>
                   </div>
                 </div>
@@ -395,7 +509,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <div className="flex items-center justify-between text-[11px] font-mono mb-2">
                   <span className="text-cvc-textMuted">ULTRASOUND ACOUSTIC SNAPSHOT</span>
                   <span className="text-cvc-cyan font-bold">
-                    {selectedAuditSession.coplanarityPercent}% IN-PLANE
+                    {currentAudit.coplanarityPercent}% IN-PLANE
                   </span>
                 </div>
                 <div className="w-full aspect-[16/9] rounded-xl bg-black border border-white/10 flex items-center justify-center relative overflow-hidden">
@@ -432,13 +546,23 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
             {/* Actions Stack */}
             <div className="space-y-2 pt-2 border-t border-white/10">
-              <button
-                onClick={() => setIsReplayModalOpen(true)}
-                className="w-full py-2.5 rounded-xl bg-cvc-purple hover:bg-purple-600 text-white font-display font-semibold text-xs shadow-glow-purple flex items-center justify-center space-x-2 transition cursor-pointer"
-              >
-                <Play className="w-3.5 h-3.5" />
-                <span>Launch 3D Trajectory Replay & Kinematic Audit</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setReviewingSession(currentAudit)}
+                  className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-display font-semibold text-xs border border-white/10 flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5 text-cvc-cyan" />
+                  <span>Full Audit</span>
+                </button>
+
+                <button
+                  onClick={() => setIsReplayModalOpen(true)}
+                  className="py-2.5 rounded-xl bg-cvc-purple hover:bg-purple-600 text-white font-display font-semibold text-xs shadow-glow-purple flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>3D Replay</span>
+                </button>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -463,7 +587,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       </div>
 
       {/* 3D Trajectory Replay Modal (From Image 8 & 9 Three.js script) */}
-      {isReplayModalOpen && (
+      {isReplayModalOpen && currentAudit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
           <div className="relative w-full max-w-5xl h-[85vh] flex flex-col">
             <button
@@ -473,9 +597,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <X className="w-5 h-5" />
             </button>
             <TrajectoryReplay3D
-              traineeName={selectedAuditSession.traineeName}
-              entryPitchDeg={selectedAuditSession.entryPitchDeg}
-              flagged={selectedAuditSession.flagged}
+              traineeName={currentAudit.traineeName || 'Trainee'}
+              entryPitchDeg={currentAudit.entryPitchDeg || 45}
+              flagged={currentAudit.flagged}
             />
           </div>
         </div>

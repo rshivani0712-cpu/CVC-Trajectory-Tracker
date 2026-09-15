@@ -259,8 +259,15 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
                   Reports
                 </button>
                 <button
-                  onClick={() => setShowProfileModal(true)}
-                  className="px-3 py-1.5 rounded-lg font-medium text-cvc-textMuted hover:text-white hover:bg-white/5 transition-all"
+                  onClick={() => {
+                    onNavigatePage('instructor');
+                    onTabChange('profile');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                    currentPage === 'instructor' && activeTab === 'profile'
+                      ? 'bg-cvc-cyan text-black font-semibold shadow-glow-cyan'
+                      : 'text-cvc-textMuted hover:text-white hover:bg-white/5'
+                  }`}
                 >
                   Profile
                 </button>

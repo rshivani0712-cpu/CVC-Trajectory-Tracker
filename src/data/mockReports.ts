@@ -56,9 +56,10 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
 
 export function generateReport(
   type: ReportType,
-  criteria: ReportFilterCriteria = {}
+  criteria: ReportFilterCriteria = {},
+  sourceSessions?: SessionResult[]
 ): GeneratedReport {
-  let filteredSessions: SessionResult[] = [...MOCK_PROCEDURAL_SESSIONS];
+  let filteredSessions: SessionResult[] = [...(sourceSessions || MOCK_PROCEDURAL_SESSIONS)];
 
   // Apply filters
   if (criteria.traineeId && criteria.traineeId !== 'all') {

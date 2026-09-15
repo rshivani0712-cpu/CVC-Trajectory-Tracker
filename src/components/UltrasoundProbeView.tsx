@@ -54,7 +54,9 @@ export const UltrasoundProbeView: React.FC<UltrasoundProbeViewProps> = ({
       const noiseGain = Math.max(12, 32 - attenuation);
 
       for (let i = 0; i < data.length; i += 20) {
-        const noise = (Math.random() - 0.5) * noiseGain;
+        // Deterministic pseudo-random hash to avoid Math.random()
+        const pseudoRand = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+        const noise = (pseudoRand - 0.5) * noiseGain;
         data[i] = Math.min(255, Math.max(0, data[i] + noise));
         data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
         data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise * 1.1));

@@ -6,7 +6,7 @@
  * from the underlying MOCK_PROCEDURAL_SESSIONS dataset to guarantee 100% data consistency.
  */
 
-import { Trainee } from '../types';
+import { Trainee, SessionResult } from '../types';
 import { MOCK_PROCEDURAL_SESSIONS } from './mockSessions';
 
 interface TraineeMetadata {
@@ -115,9 +115,9 @@ export const TRAINEE_PROFILES: TraineeMetadata[] = [
 /**
  * Derives full Trainee records with computed stats based on the unified MOCK_PROCEDURAL_SESSIONS dataset.
  */
-export function getComputedTrainees(): Trainee[] {
+export function getComputedTrainees(sourceSessions: SessionResult[] = MOCK_PROCEDURAL_SESSIONS): Trainee[] {
   return TRAINEE_PROFILES.map((profile) => {
-    const sessions = MOCK_PROCEDURAL_SESSIONS.filter((s) => s.traineeId === profile.id);
+    const sessions = sourceSessions.filter((s) => s.traineeId === profile.id);
     const totalSessions = sessions.length;
 
     if (totalSessions === 0) {

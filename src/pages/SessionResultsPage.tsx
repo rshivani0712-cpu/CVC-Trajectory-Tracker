@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SessionResult, UserProfile } from '../types';
-import { MOCK_SESSIONS } from '../api/sessions';
+import { MOCK_SESSIONS, fetchSessionById } from '../api/sessions';
+import { fetchSessionAiAnalysis, AIAnalysisResponse } from '../api/ai';
+import { dataService } from '../services/dataService';
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -9,11 +11,12 @@ import {
   Share2, 
   ChevronRight, 
   Activity, 
-  ShieldCheck,
-  Award,
-  Clock,
-  Compass,
-  ArrowLeft
+  ShieldCheck, 
+  Award, 
+  Clock, 
+  Compass, 
+  ArrowLeft,
+  Loader2
 } from 'lucide-react';
 
 interface SessionResultsPageProps {
@@ -27,9 +30,81 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
   session = MOCK_SESSIONS[0],
   onNavigatePage,
 }) => {
+  const [allSessions, setAllSessions] = useState<SessionResult[]>([session, ...MOCK_SESSIONS]);
   const [activeSession, setActiveSession] = useState<SessionResult>(session);
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState<boolean>(false);
 
-  const { competencies } = activeSession;
+  // Fetch session list from dataService and backend
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSessionsList() {
+      try {
+        const stored = await dataService.getSessions();
+        if (isMounted && stored.length > 0) {
+          const map = new Map<string, SessionResult>();
+          if (session) map.set(session.id, session);
+          for (const s of stored) {
+            if (!map.has(s.id)) map.set(s.id, s);
+          }
+          for (const m of MOCK_SESSIONS) {
+            if (!map.has(m.id)) map.set(m.id, m);
+          }
+          setAllSessions(Array.from(map.values()));
+        }
+      } catch (err) {
+        console.warn('[SessionResultsPage] loadSessionsList error:', err);
+      }
+    }
+    loadSessionsList();
+    return () => {
+      isMounted = false;
+    };
+  }, [session]);
+
+  // When active session changes, load from backend endpoint /api/sessions/{session_id} and /api/sessions/{session_id}/ai-analysis
+  useEffect(() => {
+    let isMounted = true;
+    if (!activeSession?.id) return;
+
+    setIsLoadingSession(true);
+
+    Promise.all([
+      fetchSessionById(activeSession.id).catch(() => null),
+      fetchSessionAiAnalysis(activeSession.id).catch(() => null),
+    ]).then(([backendSession, backendAi]) => {
+      if (!isMounted) return;
+      if (backendSession) {
+        setActiveSession((prev) => ({ ...prev, ...backendSession }));
+      }
+      if (backendAi) {
+        setAiAnalysis(backendAi);
+      }
+      setIsLoadingSession(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSession.id]);
+
+  const competencies = activeSession.competencies || {
+    pitchControl: 90,
+    ultrasoundAlignment: 88,
+    carotidClearance: 92,
+    trajectorySmoothness: 85,
+    depthControl: 87,
+    tremorIndex: 94,
+  };
+
+  const displayStrengths = (aiAnalysis?.strengths && aiAnalysis.strengths.length > 0)
+    ? aiAnalysis.strengths
+    : activeSession.strengths || [];
+
+  const displayRecommendations = (aiAnalysis?.recommendations && aiAnalysis.recommendations.length > 0)
+    ? aiAnalysis.recommendations
+    : activeSession.recommendations || [];
+
   const metrics = [
     { label: 'Pitch Control', value: competencies.pitchControl },
     { label: 'US Alignment', value: competencies.ultrasoundAlignment },
@@ -71,9 +146,14 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h2 className="font-display font-bold text-xl md:text-2xl text-white">
-              Technique Analysis & AI Evaluation
-            </h2>
+            <div className="flex items-center space-x-2">
+              <h2 className="font-display font-bold text-xl md:text-2xl text-white">
+                Technique Analysis & AI Evaluation
+              </h2>
+              {isLoadingSession && (
+                <Loader2 className="w-4 h-4 text-cvc-cyan animate-spin" />
+              )}
+            </div>
             <p className="text-xs font-mono text-cvc-textMuted">
               Post-cannulation trajectory audit and curriculum debrief
             </p>
@@ -86,14 +166,14 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
           <select
             value={activeSession.id}
             onChange={(e) => {
-              const found = MOCK_SESSIONS.find((s) => s.id === e.target.value);
+              const found = allSessions.find((s) => s.id === e.target.value);
               if (found) setActiveSession(found);
             }}
-            className="bg-black/60 border border-white/15 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cvc-purple"
+            className="bg-black/60 border border-white/15 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cvc-purple max-w-[260px] truncate"
           >
-            {MOCK_SESSIONS.map((s) => (
+            {allSessions.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.sessionNumber} ({s.traineeName} - {s.score}/100)
+                {s.sessionNumber} ({s.traineeName || 'Operator'} - {s.score}/100)
               </option>
             ))}
           </select>
@@ -116,7 +196,7 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
               activeSession.score >= 80 ? 'text-emerald-400' : 'text-cvc-amber'
             }`}
           >
-            {activeSession.performanceLevel}
+            {activeSession.performanceLevel || (activeSession.score >= 80 ? 'PROFICIENT' : 'NEEDS_REMEDIATION')}
           </span>
         </div>
 
@@ -124,55 +204,53 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
         <div className="glass-hud rounded-3xl p-5 border border-white/10 flex flex-col justify-between font-mono">
           <span className="text-[10px] text-cvc-textMuted uppercase">ATTACK PITCH ANGLE</span>
           <div className="my-2 text-2xl font-bold text-cvc-cyan font-display">
-            {activeSession.entryPitchDeg}°
+            {activeSession.entryPitchDeg ?? activeSession.entryAngle ?? 40.0}°
           </div>
           <span className="text-[11px] text-white/50">Target Range: 35.0° - 45.0°</span>
         </div>
 
         {/* Carotid Clearance */}
         <div className="glass-hud rounded-3xl p-5 border border-white/10 flex flex-col justify-between font-mono">
-          <span className="text-[10px] text-cvc-textMuted uppercase">CAROTID CLEARANCE</span>
-          <div
-            className={`my-2 text-2xl font-bold font-display ${
-              activeSession.carotidClearanceMm < 5.0 ? 'text-cvc-crimson' : 'text-emerald-400'
-            }`}
-          >
-            {activeSession.carotidClearanceMm} mm
+          <span className="text-[10px] text-cvc-textMuted uppercase">CAROTID SAFETY MARGIN</span>
+          <div className="my-2 text-2xl font-bold text-emerald-400 font-display">
+            {activeSession.carotidClearanceMm ?? activeSession.carotidClearance ?? 11.4} mm
           </div>
-          <span className="text-[11px] text-white/50">Safety Envelope: &gt; 5.0 mm</span>
+          <span className="text-[11px] text-white/50">Safety Threshold: &gt; 5.0 mm</span>
         </div>
 
-        {/* Ultrasonic Coplanarity */}
+        {/* Duration / Kinematics */}
         <div className="glass-hud rounded-3xl p-5 border border-white/10 flex flex-col justify-between font-mono">
-          <span className="text-[10px] text-cvc-textMuted uppercase">US COPLANARITY</span>
+          <span className="text-[10px] text-cvc-textMuted uppercase">PROCEDURAL ELAPSED</span>
           <div className="my-2 text-2xl font-bold text-white font-display">
-            {activeSession.coplanarityPercent}%
+            {activeSession.durationSeconds}s
           </div>
-          <span className="text-[11px] text-cvc-cyan font-semibold">&gt; 85% In-Plane Alignment</span>
+          <span className="text-[11px] text-white/50">
+            Deviation: {activeSession.trajectoryDeviationDeg ?? 1.2}°
+          </span>
         </div>
       </div>
 
-      {/* Center 2-Column Evaluation Grid */}
+      {/* Two Column Section: Radar Chart + Detailed Evaluation */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Radar Spiderweb Polygon */}
-        <div className="glass-hud rounded-3xl p-6 border border-white/10 flex flex-col items-center">
-          <div className="w-full flex items-center justify-between pb-3 border-b border-white/10 text-xs font-mono">
-            <span className="font-semibold text-white uppercase">Competency Polygon Analysis</span>
-            <div className="flex items-center space-x-3 text-[10px]">
-              <div className="flex items-center space-x-1.5">
-                <span className="w-2.5 h-2.5 rounded bg-cvc-purple"></span>
-                <span className="text-white">Operator</span>
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <span className="w-2.5 h-2.5 rounded bg-cvc-cyan/40"></span>
-                <span className="text-white/60">Faculty Target</span>
-              </div>
+        {/* Radar Chart */}
+        <div className="glass-hud rounded-3xl p-5 md:p-6 border border-white/10 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="font-display font-bold text-sm text-white uppercase tracking-wider">
+                Multi-Axis Kinematic Competency Map
+              </span>
+              <span className="text-[10px] font-mono text-cvc-cyan border border-cvc-cyan/30 px-2 py-0.5 rounded-full bg-cyan-950/40">
+                BENCHMARK: ATTENDING (92%)
+              </span>
             </div>
+            <p className="text-xs text-cvc-textMuted mt-1">
+              Visual comparison of trainee entry metrics vs Attending benchmark envelope
+            </p>
           </div>
 
-          <div className="relative w-full max-w-[340px] aspect-square my-4 flex items-center justify-center">
+          <div className="w-full flex items-center justify-center my-4">
             <svg width="320" height="300" className="overflow-visible">
-              {[0.25, 0.5, 0.75, 1.0].map((level) => {
+              {[0.2, 0.4, 0.6, 0.8, 1.0].map((level) => {
                 const pts = [0, 1, 2, 3, 4, 5]
                   .map((i) => {
                     const angle = (Math.PI * 2 * i) / 6 - Math.PI / 2;
@@ -252,7 +330,7 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
               <span>DETERMINISTIC AI EVALUATION (AI-TUTOR-ENGINE v4.2)</span>
             </div>
             <p className="text-sm text-white/80 leading-relaxed">
-              {activeSession.summary}
+              {aiAnalysis?.feedback || activeSession.summary}
             </p>
           </div>
 
@@ -263,7 +341,7 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
               <span>DEMONSTRATED COMPETENCIES (STRENGTHS)</span>
             </div>
             <ul className="space-y-2 text-xs text-white/80">
-              {activeSession.strengths.map((str, idx) => (
+              {displayStrengths.map((str, idx) => (
                 <li key={idx} className="flex items-start space-x-2">
                   <span className="text-emerald-400 font-bold">•</span>
                   <span className="leading-snug">{str}</span>
@@ -279,7 +357,7 @@ export const SessionResultsPage: React.FC<SessionResultsPageProps> = ({
               <span>TARGETED CLINICAL RECOMMENDATIONS</span>
             </div>
             <ul className="space-y-2 text-xs text-white/80">
-              {activeSession.recommendations.map((rec, idx) => (
+              {displayRecommendations.map((rec, idx) => (
                 <li key={idx} className="flex items-start space-x-2">
                   <span className="text-cvc-amber font-bold">→</span>
                   <span className="leading-snug">{rec}</span>

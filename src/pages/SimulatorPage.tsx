@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UserProfile, PatientBodyType, AnatomicalSite, LiveTelemetry, SessionResult } from '../types';
 import { AnatomyCanvas3D } from '../components/AnatomyCanvas3D';
 import { UltrasoundProbeView } from '../components/UltrasoundProbeView';
 import { TelemetryHUD } from '../components/TelemetryHUD';
 import { ThresholdMatrixBar } from '../components/ThresholdMatrixBar';
 import { TechniqueAnalysisModal } from '../components/TechniqueAnalysisModal';
-import { evaluateThreshold } from '../api/trajectory';
-import { PATIENT_PROFILES, ANATOMICAL_SITES } from '../api/sessions';
+import { evaluateThreshold, sendSessionTrajectory } from '../api/trajectory';
+import { PATIENT_PROFILES, ANATOMICAL_SITES, createSession } from '../api/sessions';
+import { dataService } from '../services/dataService';
 import { 
   Layers, 
   Rotate3d, 
@@ -96,6 +97,38 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
   const [isPatientDrawerOpen, setIsPatientDrawerOpen] = useState<boolean>(false);
   const [isSiteDrawerOpen, setIsSiteDrawerOpen] = useState<boolean>(false);
 
+  // Active backend session ID
+  const [activeSessionId, setActiveSessionId] = useState<string>(currentSession?.id || '');
+  const lastTelemetrySentRef = useRef<number>(0);
+
+  // Initialize or re-create backend session when patient or site changes
+  useEffect(() => {
+    let isMounted = true;
+    async function initSession() {
+      try {
+        const session = await createSession({
+          patientProfileId: selectedPatient.id,
+          siteId: selectedSite.id,
+          traineeId: currentUser.id,
+          traineeName: currentUser.name,
+        });
+        if (isMounted && session) {
+          setActiveSessionId(session.id);
+          dataService.addSession(session);
+          if (setCurrentSession) {
+            setCurrentSession(session);
+          }
+        }
+      } catch (err) {
+        console.warn('[SimulatorPage] Backend createSession error:', err);
+      }
+    }
+    initSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedPatient.id, selectedSite.id, currentUser.id, currentUser.name, setCurrentSession]);
+
   // Reset max depth when patient changes
   useEffect(() => {
     setTelemetry((prev) => ({
@@ -116,20 +149,52 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
 
   // Direct Live Telemetry Callback from AnatomyCanvas3D (connected directly to mouse movement!)
   const handleUpdateTelemetry = useCallback((newTelemetry: LiveTelemetry) => {
+    // 1. Instantly update local HUD & Canvas state
     setTelemetry(newTelemetry);
-  }, []);
+
+    // 2. Stream to backend /api/sessions/{session_id}/trajectory (throttled to ~150ms for ultra-responsive streaming)
+    const now = Date.now();
+    if (activeSessionId && now - lastTelemetrySentRef.current > 150) {
+      lastTelemetrySentRef.current = now;
+      sendSessionTrajectory(activeSessionId, newTelemetry)
+        .then((backendResult) => {
+          if (backendResult) {
+            setTelemetry((prev) => ({
+              ...prev,
+              pitch: backendResult.pitch ?? prev.pitch,
+              yaw: backendResult.yaw ?? prev.yaw,
+              depth: backendResult.depth ?? prev.depth,
+              trajectoryDeviation: backendResult.trajectoryDeviation ?? prev.trajectoryDeviation,
+              vesselDistance: backendResult.vesselDistance ?? prev.vesselDistance,
+              carotidDistance: backendResult.carotidDistance ?? prev.carotidDistance,
+              trainingScore: backendResult.trainingScore ?? prev.trainingScore,
+              coplanarity: backendResult.coplanarity ?? prev.coplanarity,
+              status: backendResult.status ?? prev.status,
+              statusMessage: backendResult.statusMessage ?? prev.statusMessage,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeSessionId]);
 
   // Manual HUD adjustments
   const handlePitchAdjust = (delta: number) => {
     setTelemetry((prev) => {
       const nextPitch = Number((prev.pitch + delta).toFixed(1));
       const nextDev = Number(Math.sqrt(Math.pow(nextPitch - 40, 2) + Math.pow(prev.yaw - 4.5, 2)).toFixed(1));
-      return {
+      const updated = {
         ...prev,
         pitch: nextPitch,
         entryAngle: nextPitch,
         trajectoryDeviation: nextDev,
       };
+      if (activeSessionId) {
+        sendSessionTrajectory(activeSessionId, updated).then((b) => {
+          if (b) setTelemetry((p) => ({ ...p, ...b }));
+        }).catch(() => {});
+      }
+      return updated;
     });
   };
 
@@ -137,21 +202,33 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
     setTelemetry((prev) => {
       const nextYaw = Number((prev.yaw + delta).toFixed(1));
       const nextDev = Number(Math.sqrt(Math.pow(prev.pitch - 40, 2) + Math.pow(nextYaw - 4.5, 2)).toFixed(1));
-      return {
+      const updated = {
         ...prev,
         yaw: nextYaw,
         trajectoryDeviation: nextDev,
       };
+      if (activeSessionId) {
+        sendSessionTrajectory(activeSessionId, updated).then((b) => {
+          if (b) setTelemetry((p) => ({ ...p, ...b }));
+        }).catch(() => {});
+      }
+      return updated;
     });
   };
 
   const handleDepthAdjust = (delta: number) => {
     setTelemetry((prev) => {
       const nextDepth = Math.max(5.0, Math.min(prev.maxDepth, Number((prev.depth + delta).toFixed(1))));
-      return {
+      const updated = {
         ...prev,
         depth: nextDepth,
       };
+      if (activeSessionId) {
+        sendSessionTrajectory(activeSessionId, updated).then((b) => {
+          if (b) setTelemetry((p) => ({ ...p, ...b }));
+        }).catch(() => {});
+      }
+      return updated;
     });
   };
 
@@ -161,26 +238,35 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
     setIsSimulating(false);
 
     // Update current session record with actual trainee data
+    const completedSession: SessionResult = {
+      ...currentSession,
+      id: activeSessionId || currentSession.id || `sess-${Date.now()}`,
+      sessionNumber: currentSession.sessionNumber || `#CVC-2026-${String(Math.floor(Math.random() * 900) + 100)}`,
+      traineeId: currentUser.id,
+      traineeName: currentUser.name,
+      patientProfileId: selectedPatient.id,
+      patientProfileName: selectedPatient.name,
+      siteName: selectedSite.name,
+      score: telemetry.trainingScore,
+      classification: telemetry.trainingScore >= 85 
+        ? 'GOOD_TECHNIQUE' 
+        : telemetry.trainingScore >= 70 
+        ? 'ACCEPTABLE_VARIATION' 
+        : 'EXCESSIVE_PITCH_ANGLE',
+      performanceLevel: telemetry.trainingScore >= 85 ? 'PROFICIENT' : 'NEEDS_REMEDIATION',
+      carotidClearanceMm: telemetry.carotidDistance,
+      entryPitchDeg: telemetry.pitch,
+      coplanarityPercent: telemetry.coplanarity,
+      trajectoryDeviationDeg: telemetry.trajectoryDeviation,
+      durationSeconds: sessionTimer || 42,
+      summary: `Trainee completed simulated right IJV cannulation on ${selectedPatient.name}. Insertion entry pitch achieved ${telemetry.pitch.toFixed(1)}° with lateral yaw ${telemetry.yaw.toFixed(1)}°. Carotid clearance maintained at ${telemetry.carotidDistance.toFixed(1)}mm. Technique score: ${telemetry.trainingScore}/100.`,
+      status: 'completed',
+    };
+
     if (setCurrentSession) {
-      setCurrentSession((prev) => ({
-        ...prev,
-        patientName: selectedPatient.name,
-        patientCohort: selectedPatient.cohort,
-        score: telemetry.trainingScore,
-        entryAngle: telemetry.pitch,
-        lateralYaw: telemetry.yaw,
-        carotidClearance: telemetry.carotidDistance,
-        depthMm: telemetry.depth,
-        velocityMms: telemetry.velocity,
-        durationSeconds: sessionTimer || 42,
-        classification: telemetry.trainingScore >= 85 
-          ? 'GOOD_TECHNIQUE' 
-          : telemetry.trainingScore >= 70 
-          ? 'ACCEPTABLE_VARIATION' 
-          : 'EXCESSIVE_PITCH_ANGLE',
-        summary: `Trainee completed simulated right IJV cannulation on ${selectedPatient.name}. Insertion entry pitch achieved ${telemetry.pitch.toFixed(1)}° with lateral yaw ${telemetry.yaw.toFixed(1)}°. Carotid clearance maintained at ${telemetry.carotidDistance.toFixed(1)}mm. Technique score: ${telemetry.trainingScore}/100.`,
-      }));
+      setCurrentSession(completedSession);
     }
+    dataService.addSession(completedSession);
 
     setIsAnalysisModalOpen(true);
   };
@@ -199,6 +285,19 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
       status: 'WITHIN_THRESHOLD',
       statusMessage: 'TRAJECTORY STABLE • NOMINAL ALIGNMENT',
     }));
+
+    createSession({
+      patientProfileId: selectedPatient.id,
+      siteId: selectedSite.id,
+      traineeId: currentUser.id,
+      traineeName: currentUser.name,
+    }).then((s) => {
+      if (s) {
+        setActiveSessionId(s.id);
+        dataService.addSession(s);
+        if (setCurrentSession) setCurrentSession(s);
+      }
+    }).catch(() => {});
   };
 
   return (

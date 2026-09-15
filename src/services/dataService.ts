@@ -23,8 +23,9 @@ import {
 } from '../types';
 import { MOCK_PROCEDURAL_SESSIONS } from '../data/mockSessions';
 import { MOCK_TRAINEES, getComputedTrainees } from '../data/mockTrainees';
-import { MOCK_PERFORMANCE_ANALYTICS, PerformanceAnalyticsSummary } from '../data/mockAnalytics';
+import { MOCK_PERFORMANCE_ANALYTICS, PerformanceAnalyticsSummary, computePerformanceAnalytics } from '../data/mockAnalytics';
 import { generateReport } from '../data/mockReports';
+import { fetchSessions, fetchSessionById } from '../api/sessions';
 
 // Mutable in-memory store for session status and feedback updates during current run
 const inMemorySessions: SessionResult[] = [...MOCK_PROCEDURAL_SESSIONS];
@@ -52,7 +53,7 @@ class DataService {
    * Retrieve all trainees with optional filtering and sorting
    */
   async getTrainees(filters?: TraineeFilterOptions): Promise<Trainee[]> {
-    let trainees = getComputedTrainees();
+    let trainees = getComputedTrainees(inMemorySessions);
 
     if (!filters) return trainees;
 
@@ -100,7 +101,7 @@ class DataService {
    * Retrieve a single trainee by ID
    */
   async getTraineeById(id: string): Promise<Trainee | null> {
-    const trainees = getComputedTrainees();
+    const trainees = getComputedTrainees(inMemorySessions);
     return trainees.find((t) => t.id === id) || null;
   }
 
@@ -114,9 +115,35 @@ class DataService {
   }
 
   /**
+   * Add or update an active session in local store
+   */
+  addSession(session: SessionResult): void {
+    const idx = inMemorySessions.findIndex((s) => s.id === session.id || s.sessionNumber === session.sessionNumber);
+    if (idx !== -1) {
+      inMemorySessions[idx] = { ...inMemorySessions[idx], ...session };
+    } else {
+      inMemorySessions.unshift(session);
+    }
+  }
+
+  /**
    * Retrieve all sessions with filtering and sorting
    */
   async getSessions(filters?: SessionFilterOptions): Promise<SessionResult[]> {
+    try {
+      const backendSessions = await fetchSessions();
+      if (Array.isArray(backendSessions) && backendSessions.length > 0) {
+        for (const bs of backendSessions) {
+          const exists = inMemorySessions.some((s) => s.id === bs.id || s.sessionNumber === bs.sessionNumber);
+          if (!exists) {
+            inMemorySessions.unshift(bs);
+          }
+        }
+      }
+    } catch {
+      // Keep local in-memory fallback
+    }
+
     let sessions = [...inMemorySessions];
 
     if (!filters) {
@@ -177,7 +204,19 @@ class DataService {
    * Retrieve a single session by ID or sessionNumber
    */
   async getSessionById(id: string): Promise<SessionResult | null> {
-    const session = inMemorySessions.find((s) => s.id === id || s.sessionNumber === id);
+    let session = inMemorySessions.find((s) => s.id === id || s.sessionNumber === id);
+    if (session) return session;
+
+    try {
+      const backendSession = await fetchSessionById(id);
+      if (backendSession) {
+        this.addSession(backendSession);
+        return backendSession;
+      }
+    } catch {
+      // Fallback
+    }
+
     return session || null;
   }
 
@@ -206,7 +245,7 @@ class DataService {
    * Retrieve Cohort Performance Analytics summary
    */
   async getPerformanceAnalytics(): Promise<PerformanceAnalyticsSummary> {
-    return MOCK_PERFORMANCE_ANALYTICS;
+    return computePerformanceAnalytics(inMemorySessions);
   }
 
   /**
@@ -216,7 +255,7 @@ class DataService {
     type: ReportType,
     criteria?: ReportFilterCriteria
   ): Promise<GeneratedReport> {
-    return generateReport(type, criteria);
+    return generateReport(type, criteria, inMemorySessions);
   }
 
   /**

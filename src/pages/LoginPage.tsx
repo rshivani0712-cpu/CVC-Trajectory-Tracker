@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserRole, UserProfile } from '../types';
-import { loginUser, DEMO_CREDENTIALS } from '../api/auth';
+import { loginUser, registerUser, DEMO_CREDENTIALS } from '../api/auth';
 import { 
   ShieldCheck, 
   Activity, 
@@ -60,8 +60,10 @@ const ROLE_OPTIONS: RoleOption[] = [
 ];
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigatePage }) => {
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [selectedRole, setSelectedRole] = useState<UserRole>('trainee');
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState<boolean>(false);
+  const [fullName, setFullName] = useState<string>('');
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -281,11 +283,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
     setIsLoading(true);
 
     try {
-      const result = await loginUser({
-        username,
-        password,
-        role: selectedRole,
-      });
+      let result;
+      if (authMode === 'register') {
+        result = await registerUser({
+          username,
+          password,
+          role: selectedRole,
+          name: fullName.trim() || undefined,
+        });
+      } else {
+        result = await loginUser({
+          username,
+          password,
+          role: selectedRole,
+        });
+      }
 
       setIsSuccess(true);
 
@@ -309,7 +321,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
     } catch (err: any) {
       setIsLoading(false);
       setIsSuccess(false);
-      setErrorMessage(err?.message || 'Invalid credentials. Please check your username and password.');
+      setErrorMessage(err?.message || (authMode === 'register' ? 'Registration failed. Please check your inputs.' : 'Invalid credentials. Please check your username and password.'));
     }
   };
 
@@ -417,6 +429,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
               </p>
             </div>
 
+            {/* Mode Switcher Tabs */}
+            <div className="flex rounded-2xl bg-black/60 p-1 border border-white/10 text-xs font-mono">
+              <button
+                type="button"
+                id="tab-signin-mode"
+                onClick={() => { setAuthMode('login'); setErrorMessage(''); }}
+                className={`flex-1 py-1.5 rounded-xl font-semibold transition flex items-center justify-center space-x-1.5 ${
+                  authMode === 'login'
+                    ? 'bg-cvc-purple text-white shadow-glow-purple border border-purple-400/30'
+                    : 'text-cvc-textMuted hover:text-white'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+              <button
+                type="button"
+                id="tab-register-mode"
+                onClick={() => { setAuthMode('register'); setErrorMessage(''); }}
+                className={`flex-1 py-1.5 rounded-xl font-semibold transition flex items-center justify-center space-x-1.5 ${
+                  authMode === 'register'
+                    ? 'bg-cvc-purple text-white shadow-glow-purple border border-purple-400/30'
+                    : 'text-cvc-textMuted hover:text-white'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Register</span>
+              </button>
+            </div>
+
             {/* Error Message Alert */}
             {errorMessage && (
               <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-cvc-crimson text-xs font-mono flex items-start space-x-2 animate-in fade-in">
@@ -425,12 +467,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
               </div>
             )}
 
-            {/* Login Form */}
+            {/* Login / Register Form */}
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               {/* 1. ROLE SELECTOR */}
               <div className="space-y-1.5" ref={dropdownRef}>
                 <label className="block text-[11px] font-mono font-semibold text-cvc-textMuted uppercase tracking-wider">
-                  Select Your Role
+                  {authMode === 'register' ? 'Register As Role' : 'Select Your Role'}
                 </label>
 
                 <div className="relative">
@@ -481,6 +523,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
                 </div>
               </div>
 
+              {/* REGISTER ONLY: FULL NAME */}
+              {authMode === 'register' && (
+                <div className="space-y-1.5 animate-in fade-in">
+                  <label className="block text-[11px] font-mono font-semibold text-cvc-textMuted uppercase tracking-wider">
+                    Full Name (Optional)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-white/40">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Dr. Jane Doe"
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-2xl bg-black/50 border border-white/15 focus:border-cvc-cyan text-white text-xs font-mono placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-cvc-cyan transition"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* 2. USERNAME / EMAIL INPUT */}
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-mono font-semibold text-cvc-textMuted uppercase tracking-wider">
@@ -507,13 +570,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
                   <label className="block text-[11px] font-mono font-semibold text-cvc-textMuted uppercase tracking-wider">
                     Password
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotModal(true)}
-                    className="text-[10px] font-mono text-cvc-cyan hover:underline"
-                  >
-                    Forgot password?
-                  </button>
+                  {authMode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="text-[10px] font-mono text-cvc-cyan hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-white/40">
@@ -540,6 +605,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
               {/* 4. SUBMIT BUTTON */}
               <button
                 type="submit"
+                id={authMode === 'register' ? 'btn-register-submit' : 'btn-login-submit'}
                 disabled={isLoading}
                 className={`w-full py-3 rounded-2xl font-display font-bold text-xs uppercase tracking-wider transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer mt-2 ${
                   isSuccess
@@ -554,17 +620,40 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onNavigate
                 {isLoading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                    <span>Authenticating Operator...</span>
+                    <span>{authMode === 'register' ? 'Registering Operator...' : 'Authenticating Operator...'}</span>
                   </>
                 ) : isSuccess ? (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Credentials Verified</span>
+                    <span>{authMode === 'register' ? 'Account Created' : 'Credentials Verified'}</span>
                   </>
                 ) : (
-                  <span>Sign In</span>
+                  <span>{authMode === 'register' ? 'Register Operator' : 'Sign In'}</span>
                 )}
               </button>
+
+              {/* Mode switch helper link */}
+              <div className="text-center pt-1">
+                {authMode === 'login' ? (
+                  <button
+                    type="button"
+                    id="link-switch-to-register"
+                    onClick={() => { setAuthMode('register'); setErrorMessage(''); }}
+                    className="text-[11px] font-mono text-cvc-cyan hover:underline"
+                  >
+                    Need a new operator account? Register here
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    id="link-switch-to-login"
+                    onClick={() => { setAuthMode('login'); setErrorMessage(''); }}
+                    className="text-[11px] font-mono text-cvc-cyan hover:underline"
+                  >
+                    Already registered? Sign in here
+                  </button>
+                )}
+              </div>
             </form>
 
             {/* Subtle Security Notice */}

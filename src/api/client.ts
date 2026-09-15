@@ -4,13 +4,42 @@
  * Falls back to clean local simulated responses when backend is unavailable.
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+/**
+ * Centralized API Client configured for external FastAPI backend integration.
+ * Defaults to http://127.0.0.1:8000, configurable via VITE_API_BASE_URL.
+ */
+
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem('cvc_auth_token');
+}
+
+export function setAuthToken(token: string): void {
+  localStorage.setItem('cvc_auth_token', token);
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem('cvc_auth_token');
+  localStorage.removeItem('cvc_current_user');
+}
+
+export async function checkHealth(): Promise<{ status: string; [key: string]: any }> {
+  try {
+    return await apiRequest<{ status: string; [key: string]: any }>('/api/health', {
+      method: 'GET',
+    });
+  } catch (err) {
+    console.warn('[CVC API] Backend health check failed:', err);
+    throw err;
+  }
+}
 
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = localStorage.getItem('cvc_auth_token');
+  const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -20,28 +49,42 @@ export async function apiRequest<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const url = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${cleanEndpoint}`;
 
-  // If there's an actual external API URL specified, attempt network call
-  if (API_BASE_URL) {
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error (${response.status}): ${errorText || response.statusText}`);
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      let errorMessage = response.statusText;
+      try {
+        const errJson = await response.json();
+        errorMessage = errJson.detail || errJson.message || errJson.error || JSON.stringify(errJson);
+      } catch {
+        const text = await response.text();
+        if (text) errorMessage = text;
       }
-
-      return (await response.json()) as T;
-    } catch (err) {
-      console.warn(`[CVC API] Remote call to ${endpoint} failed, utilizing local fallback engine:`, err);
-      throw err;
+      throw new Error(`API error (${response.status}): ${errorMessage}`);
     }
-  }
 
-  // Otherwise throw to trigger clean local mock handling
-  throw new Error('BACKEND_NOT_CONFIGURED');
+    // Handle empty responses (like 204 No Content)
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return (await response.json()) as T;
+    }
+    const text = await response.text();
+    return (text ? JSON.parse(text) : {}) as T;
+  } catch (err: any) {
+    console.warn(`[CVC API] Remote call to ${endpoint} failed:`, err);
+    throw err;
+  }
 }

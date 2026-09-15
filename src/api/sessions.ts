@@ -441,9 +441,142 @@ export const MOCK_COHORT_STATS: CohortStats = {
   meanTrajectoryDev: 3.1,
 };
 
+export async function fetchPatients(): Promise<PatientBodyType[]> {
+  try {
+    const data = await apiRequest<any[]>('/api/patients');
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((item, idx) => {
+        const fallback = PATIENT_PROFILES[idx % PATIENT_PROFILES.length];
+        return {
+          id: item.id || item.patient_id || fallback.id,
+          code: item.code || fallback.code,
+          name: item.name || fallback.name,
+          cohort: item.cohort || fallback.cohort,
+          category: (item.category || fallback.category) as any,
+          badge: item.badge || fallback.badge,
+          badgeType: (item.badgeType || item.badge_type || fallback.badgeType) as any,
+          bmi: Number(item.bmi ?? fallback.bmi),
+          subqAdipose: Number(item.subqAdipose ?? item.subq_adipose ?? fallback.subqAdipose),
+          safePitch: item.safePitch || item.safe_pitch || fallback.safePitch,
+          ijvLumenDia: Number(item.ijvLumenDia ?? item.ijv_lumen_dia ?? fallback.ijvLumenDia),
+          description: item.description || fallback.description,
+          hapticResistance: item.hapticResistance || item.haptic_resistance || fallback.hapticResistance,
+          windowNote: item.windowNote || item.window_note || fallback.windowNote,
+          dragN: Number(item.dragN ?? item.drag_n ?? fallback.dragN),
+          dragText: item.dragText || item.drag_text || fallback.dragText,
+          attenuationDb: Number(item.attenuationDb ?? item.attenuation_db ?? fallback.attenuationDb),
+          attenuationText: item.attenuationText || item.attenuation_text || fallback.attenuationText,
+          marginMm: Number(item.marginMm ?? item.margin_mm ?? fallback.marginMm),
+          marginText: item.marginText || item.margin_text || fallback.marginText,
+          imageUrl: item.imageUrl || item.image_url || fallback.imageUrl,
+          anatomicalProfile: item.anatomicalProfile || item.anatomical_profile || fallback.anatomicalProfile,
+        };
+      });
+    }
+    return PATIENT_PROFILES;
+  } catch (err) {
+    console.warn('[CVC API] /api/patients failed, using local patient profiles:', err);
+    return PATIENT_PROFILES;
+  }
+}
+
+export async function fetchAccessSites(): Promise<AnatomicalSite[]> {
+  try {
+    const data = await apiRequest<any[]>('/api/access-sites');
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((item, idx) => {
+        const fallback = ANATOMICAL_SITES[idx % ANATOMICAL_SITES.length];
+        return {
+          id: item.id || item.site_id || fallback.id,
+          name: item.name || fallback.name,
+          category: (item.category || fallback.category) as any,
+          targetLumenMm: Number(item.targetLumenMm ?? item.target_lumen_mm ?? fallback.targetLumenMm),
+          depthMm: Number(item.depthMm ?? item.depth_mm ?? fallback.depthMm),
+          dangerStructure: item.dangerStructure || item.danger_structure || fallback.dangerStructure,
+          clearanceMm: Number(item.clearanceMm ?? item.clearance_mm ?? fallback.clearanceMm),
+          transducerProtocol: item.transducerProtocol || item.transducer_protocol || fallback.transducerProtocol,
+          coplanarityTarget: item.coplanarityTarget || item.coplanarity_target || fallback.coplanarityTarget,
+          pitchTolerance: item.pitchTolerance || item.pitch_tolerance || fallback.pitchTolerance,
+          riskNote: item.riskNote || item.risk_note || fallback.riskNote,
+          badge: item.badge || fallback.badge,
+        };
+      });
+    }
+    return ANATOMICAL_SITES;
+  } catch (err) {
+    console.warn('[CVC API] /api/access-sites failed, using local anatomical sites:', err);
+    return ANATOMICAL_SITES;
+  }
+}
+
+export async function saveTrainingConfiguration(config: {
+  patientId: string;
+  siteId: string;
+  [key: string]: any;
+}): Promise<any> {
+  try {
+    return await apiRequest('/api/training/configuration', {
+      method: 'POST',
+      body: JSON.stringify({
+        patient_id: config.patientId,
+        patient_profile_id: config.patientId,
+        patientId: config.patientId,
+        site_id: config.siteId,
+        siteId: config.siteId,
+        ...config,
+      }),
+    });
+  } catch (err) {
+    console.warn('[CVC API] /api/training/configuration call error:', err);
+    return { status: 'configured', ...config };
+  }
+}
+
+export function normalizeSessionResult(res: any, fallbackPatientId?: string, fallbackSiteId?: string): SessionResult {
+  const patient = PATIENT_PROFILES.find((p) => p.id === (res.patient_id || res.patientProfileId || fallbackPatientId)) || PATIENT_PROFILES[1];
+  const site = ANATOMICAL_SITES.find((s) => s.id === (res.site_id || res.siteId || fallbackSiteId)) || ANATOMICAL_SITES[0];
+
+  return {
+    id: res.id || res.session_id || `sess-${Date.now()}`,
+    sessionNumber: res.sessionNumber || res.session_number || `#CVC-2026-${String(Math.floor(Math.random() * 900) + 100)}`,
+    date: res.date || res.created_at || new Date().toISOString().replace('T', ' ').substring(0, 16),
+    traineeId: res.traineeId || res.trainee_id || 'usr_trainee_01',
+    traineeName: res.traineeName || res.trainee_name || 'Dr. M. Alexeev',
+    traineePgy: res.traineePgy || res.trainee_pgy || 'PGY-2',
+    patientProfileId: patient.id,
+    patientProfileName: res.patientProfileName || res.patient_name || patient.name,
+    siteName: res.siteName || res.site_name || site.name,
+    score: Number(res.score ?? res.composite_score ?? 88),
+    classification: (res.classification || 'GOOD_TECHNIQUE') as any,
+    performanceLevel: (res.performanceLevel || res.performance_level || 'PROFICIENT') as any,
+    carotidClearanceMm: Number(res.carotidClearanceMm ?? res.carotid_clearance_mm ?? site.clearanceMm),
+    entryPitchDeg: Number(res.entryPitchDeg ?? res.entry_pitch_deg ?? 38.4),
+    coplanarityPercent: Number(res.coplanarityPercent ?? res.coplanarity_percent ?? 92),
+    trajectoryDeviationDeg: Number(res.trajectoryDeviationDeg ?? res.trajectory_deviation_deg ?? 3.1),
+    durationSeconds: Number(res.durationSeconds ?? res.duration_seconds ?? 0),
+    strengths: res.strengths || ['Accurate initial entry trajectory', 'Consistent ultrasound probe alignment'],
+    weaknesses: res.weaknesses || ['Minor hand tremor during final advance'],
+    recommendations: res.recommendations || ['Maintain steady axial needle advancement'],
+    summary: res.summary || 'Session active in 3D Digital Twin simulation.',
+    competencies: {
+      pitchControl: Number(res.competencies?.pitchControl ?? res.competencies?.pitch_control ?? 90),
+      ultrasoundAlignment: Number(res.competencies?.ultrasoundAlignment ?? res.competencies?.ultrasound_alignment ?? 92),
+      carotidClearance: Number(res.competencies?.carotidClearance ?? res.competencies?.carotid_clearance ?? 96),
+      trajectorySmoothness: Number(res.competencies?.trajectorySmoothness ?? res.competencies?.trajectory_smoothness ?? 89),
+      depthControl: Number(res.competencies?.depthControl ?? res.competencies?.depth_control ?? 88),
+      tremorIndex: Number(res.competencies?.tremorIndex ?? res.competencies?.tremor_index ?? 85),
+    },
+    status: (res.status || 'in_progress') as any,
+  };
+}
+
 export async function fetchSessions(): Promise<SessionResult[]> {
   try {
-    return await apiRequest<SessionResult[]>('/api/sessions');
+    const data = await apiRequest<any[]>('/api/sessions');
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((d) => normalizeSessionResult(d));
+    }
+    return MOCK_SESSIONS;
   } catch {
     return MOCK_SESSIONS;
   }
@@ -451,7 +584,11 @@ export async function fetchSessions(): Promise<SessionResult[]> {
 
 export async function fetchSessionById(id: string): Promise<SessionResult | null> {
   try {
-    return await apiRequest<SessionResult>(`/api/sessions/${id}`);
+    const data = await apiRequest<any>(`/api/sessions/${id}`);
+    if (data) {
+      return normalizeSessionResult(data);
+    }
+    return MOCK_SESSIONS.find((s) => s.id === id || s.sessionNumber === id) || MOCK_SESSIONS[0];
   } catch {
     return MOCK_SESSIONS.find((s) => s.id === id || s.sessionNumber === id) || MOCK_SESSIONS[0];
   }
@@ -460,21 +597,36 @@ export async function fetchSessionById(id: string): Promise<SessionResult | null
 export async function createSession(data: {
   patientProfileId: string;
   siteId: string;
+  traineeId?: string;
+  traineeName?: string;
 }): Promise<SessionResult> {
   try {
-    return await apiRequest<SessionResult>('/api/sessions', {
+    const res = await apiRequest<any>('/api/sessions', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        patient_id: data.patientProfileId,
+        patient_profile_id: data.patientProfileId,
+        patientProfileId: data.patientProfileId,
+        site_id: data.siteId,
+        siteId: data.siteId,
+        trainee_id: data.traineeId || 'usr_trainee_01',
+        traineeId: data.traineeId || 'usr_trainee_01',
+        trainee_name: data.traineeName || 'Dr. M. Alexeev',
+        traineeName: data.traineeName || 'Dr. M. Alexeev',
+      }),
     });
-  } catch {
+
+    return normalizeSessionResult(res, data.patientProfileId, data.siteId);
+  } catch (err) {
+    console.warn('[CVC API] /api/sessions POST failed, using local session creation:', err);
     const patient = PATIENT_PROFILES.find((p) => p.id === data.patientProfileId) || PATIENT_PROFILES[1];
     const site = ANATOMICAL_SITES.find((s) => s.id === data.siteId) || ANATOMICAL_SITES[0];
     const newSession: SessionResult = {
       id: `sess-${Date.now()}`,
-      sessionNumber: `#CVC-2026-${Math.floor(885 + Math.random() * 50)}`,
+      sessionNumber: `#CVC-2026-${885 + (MOCK_SESSIONS.length % 100)}`,
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      traineeId: 'usr_trainee_01',
-      traineeName: 'Dr. M. Alexeev',
+      traineeId: data.traineeId || 'usr_trainee_01',
+      traineeName: data.traineeName || 'Dr. M. Alexeev',
       traineePgy: 'PGY-2',
       patientProfileId: patient.id,
       patientProfileName: patient.name,

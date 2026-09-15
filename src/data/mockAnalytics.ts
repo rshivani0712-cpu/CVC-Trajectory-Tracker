@@ -7,7 +7,8 @@
  */
 
 import { MOCK_PROCEDURAL_SESSIONS } from './mockSessions';
-import { MOCK_TRAINEES } from './mockTrainees';
+import { MOCK_TRAINEES, getComputedTrainees } from './mockTrainees';
+import { SessionResult } from '../types';
 
 export interface PerformanceAnalyticsSummary {
   meanProcedureScore: number;
@@ -26,10 +27,11 @@ export interface PerformanceAnalyticsSummary {
   thresholdViolationDistribution: { violation: string; count: number; severity: 'critical' | 'warning' }[];
 }
 
-export function computePerformanceAnalytics(): PerformanceAnalyticsSummary {
-  const sessions = MOCK_PROCEDURAL_SESSIONS;
+export function computePerformanceAnalytics(customSessions?: SessionResult[]): PerformanceAnalyticsSummary {
+  const sessions = customSessions || MOCK_PROCEDURAL_SESSIONS;
+  const trainees = getComputedTrainees(sessions);
   const totalSessionsCount = sessions.length;
-  const traineesTrackedCount = MOCK_TRAINEES.length;
+  const traineesTrackedCount = trainees.length;
 
   // 1. Mean Procedure Score
   const totalScore = sessions.reduce((acc, s) => acc + s.score, 0);
@@ -107,7 +109,7 @@ export function computePerformanceAnalytics(): PerformanceAnalyticsSummary {
   ];
 
   // 9. Trainee Comparison
-  const traineeComparison = MOCK_TRAINEES.map((t) => ({
+  const traineeComparison = trainees.map((t) => ({
     name: t.name,
     pgy: t.residencyYear,
     averageScore: t.averageScore,
