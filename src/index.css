@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cvc-bg: #07090e;
+  --color-cvc-panel: #0d111a;
+  --color-cvc-panel-border: rgba(255, 255, 255, 0.08);
+  --color-cvc-panel-border-hover: rgba(255, 255, 255, 0.16);
+  --color-cvc-purple: #7c5cfc;
+  --color-cvc-purple-glow: rgba(124, 92, 252, 0.35);
+  --color-cvc-cyan: #00f5d4;
+  --color-cvc-cyan-glow: rgba(0, 245, 212, 0.35);
+  --color-cvc-crimson: #ff3366;
+  --color-cvc-crimson-glow: rgba(255, 51, 102, 0.35);
+  --color-cvc-amber: #ffb703;
+  --color-cvc-emerald: #10b981;
+  --color-cvc-dark-muted: #151b26;
+  --color-cvc-text-muted: #8b9bb4;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Precision Glass Panel Style */
+.glass-hud {
+  background: rgba(13, 17, 26, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.glass-pill {
+  background: rgba(22, 28, 42, 0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+/* Viewport crosshairs grid */
+.viewport-grid-bg {
+  background-image: 
+    radial-gradient(circle at center, rgba(124, 92, 252, 0.06) 0%, transparent 70%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 30px 30px, 30px 30px;
+}
+
+/* Glow Shadows */
+.shadow-surgical {
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.55);
+}
+.shadow-glow-purple {
+  box-shadow: 0 0 20px -3px rgba(124, 92, 252, 0.5);
+}
+.shadow-glow-cyan {
+  box-shadow: 0 0 15px -3px rgba(0, 245, 212, 0.45);
+}
+.shadow-glow-crimson {
+  box-shadow: 0 0 15px -3px rgba(255, 51, 102, 0.45);
+}
+
+/* Pulsing rings */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 0.4; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2.4s infinite ease-in-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(10, 14, 22, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+

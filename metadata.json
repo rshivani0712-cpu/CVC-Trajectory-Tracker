@@ -1,0 +1,7 @@
+{
+  "name": "CVC Digital Twin Simulator",
+  "description": "High-fidelity browser-based 3D simulation platform for central venous catheter insertion training with 6-DOF tracking, ultrasound guidance, and AI technique classification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Compatibility safeguard for sandboxed iframe environments where window.fetch has only a getter -->
+    <script>
+      (function() {
+        try {
+          // Listen for and suppress unhandled getter-only assignment errors in sandbox
+          window.addEventListener('error', function(e) {
+            if (e && e.message && e.message.indexOf('Cannot set property fetch') !== -1) {
+              e.preventDefault();
+              console.warn('[CVC Digital Twin] Suppressed iframe environment fetch setter error:', e.message);
+            }
+          });
+
+          var targetFetch = window.fetch;
+          if (typeof targetFetch === 'function') {
+            var currentFetch = targetFetch.bind(window);
+            var winProto = window.Window ? window.Window.prototype : Object.getPrototypeOf(window);
+
+            // Attempt to define setter on Window.prototype if configurable
+            if (winProto) {
+              try {
+                var protoDesc = Object.getOwnPropertyDescriptor(winProto, 'fetch');
+                if (protoDesc && protoDesc.configurable && !protoDesc.set) {
+                  Object.defineProperty(winProto, 'fetch', {
+                    get: function() { return currentFetch; },
+                    set: function(val) { currentFetch = val; },
+                    configurable: true,
+                    enumerable: protoDesc.enumerable !== undefined ? protoDesc.enumerable : true
+                  });
+                }
+              } catch (errProto) {}
+            }
+
+            // Define own property with getter and setter directly on window
+            try {
+              var winDesc = Object.getOwnPropertyDescriptor(window, 'fetch');
+              if (!winDesc || winDesc.configurable || (!winDesc.set && winDesc.configurable !== false)) {
+                Object.defineProperty(window, 'fetch', {
+                  get: function() { return currentFetch; },
+                  set: function(val) { currentFetch = val; },
+                  configurable: true,
+                  enumerable: true
+                });
+              }
+            } catch (errWin) {}
+          }
+        } catch (err) {
+          console.warn('[CVC Digital Twin] Fetch compatibility setup warning:', err);
+        }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CVC Digital Twin Simulator - Master Workstation</title>
+    <meta name="description" content="High-fidelity browser-based 3D simulation platform for central venous catheter insertion training with 6-DOF tracking, ultrasound guidance, and AI technique classification." />
+    <meta property="og:title" content="CVC Digital Twin Simulator - Master Workstation" />
+    <meta property="og:description" content="High-fidelity browser-based 3D simulation platform for central venous catheter insertion training with 6-DOF tracking, ultrasound guidance, and AI technique classification." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Fonts: Space Grotesk, Inter, JetBrains Mono, Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#07090e] text-slate-200 antialiased overflow-x-hidden select-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
