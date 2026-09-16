@@ -73,27 +73,29 @@ export const AnatomyCanvas3D: React.FC<AnatomyCanvas3DProps> = ({
   const [loadingStepText, setLoadingStepText] = useState<string>('Initializing Human Atlas...');
   const [activeAtlasType, setActiveAtlasType] = useState<'male' | 'female'>('male');
 
-  // Needle live kinematics references
-  const pitchRef = useRef<number>(telemetry.pitch || 40.0);
-  const yawRef = useRef<number>(telemetry.yaw || 4.5);
-  const depthRef = useRef<number>(telemetry.depth || 16.0);
-  const maxDepthRef = useRef<number>(patient.subqAdipose + 12);
-  maxDepthRef.current = patient.subqAdipose + 12;
-
-  // Velocity tracking
-  const lastMousePosRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: performance.now() });
-  const smoothedVelocityRef = useRef<number>(1.2);
-
-  // Dragging state for camera orbit
-  const isDraggingOrbitRef = useRef<boolean>(false);
-  const orbitMouseStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
   // Determine gender for atlas
   const isFemale = patient.name.toLowerCase().includes('female') || patient.cohort.toLowerCase().includes('female');
   const sex: 'male' | 'female' = isFemale ? 'female' : 'male';
 
   const siteCategory = (selectedSite?.category || 'neck') as 'neck' | 'chest' | 'arm' | 'groin';
   const siteDef = SITE_DEFINITIONS[siteCategory];
+
+  // Needle live kinematics references
+  const pitchRef = useRef(siteDef.neutralPitchDeg);
+  const yawRef = useRef(siteDef.neutralYawDeg);
+  const depthRef = useRef(16.0);
+  const maxDepthRef = useRef(siteDef.maxDepthMm);
+  const smoothedVelocityRef = useRef(0.0);
+  const isDraggingOrbitRef = useRef(false);
+  const orbitMouseStartRef = useRef({ x: 0, y: 0 });
+  const lastMousePosRef = useRef({ x: 0, y: 0, time: performance.now() });
+  
+  // Needle Locking State
+  const [isLocked, setIsLocked] = useState(false);
+  const isLockedRef = useRef(isLocked);
+  useEffect(() => {
+    isLockedRef.current = isLocked;
+  }, [isLocked]);
 
   // 1. Initialize Scene Manager and Load Human Atlas Anatomy
   useEffect(() => {
@@ -182,6 +184,8 @@ export const AnatomyCanvas3D: React.FC<AnatomyCanvas3DProps> = ({
         orbitMouseStartRef.current = { x: e.clientX, y: e.clientY };
         return;
       }
+      
+      if (isLockedRef.current) return;
 
       // Needle Mode: Cursor controls Pitch (Y) and Yaw (X)
       if (controlModeRef.current === 'needle') {
@@ -218,6 +222,8 @@ export const AnatomyCanvas3D: React.FC<AnatomyCanvas3DProps> = ({
       if (e.button === 2 || e.altKey || controlModeRef.current === 'camera') {
         isDraggingOrbitRef.current = true;
         orbitMouseStartRef.current = { x: e.clientX, y: e.clientY };
+      } else if (e.button === 0 && controlModeRef.current === 'needle' && !isLockedRef.current) {
+        setIsLocked(true);
       }
     };
 
@@ -227,6 +233,8 @@ export const AnatomyCanvas3D: React.FC<AnatomyCanvas3DProps> = ({
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
+
+      if (isLockedRef.current) return;
 
       if (controlModeRef.current === 'needle' && !e.altKey) {
         // Wheel adjusts insertion depth smoothly in increments
@@ -305,6 +313,7 @@ export const AnatomyCanvas3D: React.FC<AnatomyCanvas3DProps> = ({
     if (onUpdateTelemetry) {
       onUpdateTelemetry(live);
     }
+    setIsLocked(false);
   }, [selectedSite]);
 
   // 3. Respond to Patient Profile Change
@@ -392,6 +401,28 @@ export const AnatomyCanvas3D: React.FC<AnatomyCanvas3DProps> = ({
             <span className="font-mono text-[10px] text-cvc-cyan/90 tracking-wide">
               {loadingStepText}
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* NEEDLE LOCKED Overlay */}
+      {isLocked && !isLoadingAtlas && (
+        <div className="absolute inset-x-0 top-6 flex justify-center z-20 pointer-events-none">
+          <div className="glass-hud rounded-xl px-4 py-2 flex flex-col items-center pointer-events-auto border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+            <span className="text-cvc-amber font-bold font-display text-xs tracking-wider animate-pulse mb-1">
+              NEEDLE LOCKED
+            </span>
+            <div className="flex space-x-3 text-[10px] font-mono text-white mb-2">
+              <span>Pitch: {pitchRef.current.toFixed(1)}°</span>
+              <span>Yaw: {yawRef.current.toFixed(1)}°</span>
+              <span>Depth: {depthRef.current.toFixed(1)}mm</span>
+            </div>
+            <button
+              onClick={() => setIsLocked(false)}
+              className="px-3 py-1 text-[10px] rounded bg-white/10 hover:bg-white/20 text-white font-bold transition cursor-pointer"
+            >
+              Reset / Reposition
+            </button>
           </div>
         </div>
       )}

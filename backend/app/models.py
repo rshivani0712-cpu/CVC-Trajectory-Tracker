@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 class Position(BaseModel):
@@ -67,8 +68,8 @@ class AccessSiteResponse(BaseModel):
         from_attributes = True
 
 class SessionCreateRequest(BaseModel):
-    patient_id: str
-    access_site_id: str
+    patient_id: Optional[str] = None
+    access_site_id: Optional[str] = None
 
 class TrainingConfigurationRequest(BaseModel):
     patient_id: str

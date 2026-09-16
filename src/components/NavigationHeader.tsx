@@ -98,19 +98,9 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
         {/* Left: User Identity & Subtle Mode Indicator */}
         <div className="flex items-center space-x-3 md:space-x-4">
           <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setShowProfileModal(true)}
-              className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-display font-bold text-sm border border-white/20 shadow-sm transition hover:scale-105 active:scale-95 cursor-pointer ${
-                currentUser.role === 'trainee' 
-                  ? 'bg-gradient-to-br from-cvc-purple to-indigo-800 text-white shadow-glow-purple'
-                  : currentUser.role === 'instructor'
-                  ? 'bg-gradient-to-br from-cvc-cyan to-teal-700 text-black shadow-glow-cyan'
-                  : 'bg-gradient-to-br from-amber-500 to-amber-800 text-black'
-              }`}
-              title="View Operator Profile"
-            >
-              {currentUser.avatar}
-            </button>
+            <div className="flex items-center space-x-2 mr-2">
+              <img src="/cvc-logo.png" alt="CVC Digital Twin" className="h-8 md:h-10 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
+            </div>
 
             <div>
               <div className="flex items-center space-x-2">
@@ -123,9 +113,6 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
                   <span>{roleBadge.label}</span>
                 </div>
               </div>
-              <p className="text-[11px] text-cvc-textMuted font-mono truncate max-w-[260px] md:max-w-xs mt-0.5">
-                {currentUser.title} • {currentUser.department}
-              </p>
             </div>
           </div>
 
@@ -462,19 +449,9 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
             </div>
 
             <div className="flex items-center space-x-4 p-4 rounded-2xl bg-black/40 border border-white/5">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-display font-black text-xl border border-white/20 ${
-                currentUser.role === 'trainee' 
-                  ? 'bg-cvc-purple text-white shadow-glow-purple' 
-                  : currentUser.role === 'instructor'
-                  ? 'bg-cvc-cyan text-black shadow-glow-cyan'
-                  : 'bg-amber-500 text-black'
-              }`}>
-                {currentUser.avatar}
-              </div>
               <div>
                 <h4 className="font-display font-bold text-base text-white">{currentUser.name}</h4>
-                <p className="text-xs text-cvc-textMuted font-mono">{currentUser.title}</p>
-                <div className="mt-1 flex items-center space-x-1.5">
+                <div className="mt-2 flex items-center space-x-1.5">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${roleBadge.badgeClass}`}>
                     {roleBadge.label}
                   </span>
@@ -484,8 +461,8 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
 
             <div className="space-y-2 font-mono text-xs">
               <div className="p-3 rounded-xl bg-black/30 border border-white/5 flex items-center justify-between">
-                <span className="text-cvc-textMuted">Department</span>
-                <span className="text-white font-medium">{currentUser.department}</span>
+                <span className="text-cvc-textMuted">Authentication Level</span>
+                <span className="text-white font-medium capitalize">{currentUser.role}</span>
               </div>
               {currentUser.sessionCount !== undefined && (
                 <div className="p-3 rounded-xl bg-black/30 border border-white/5 flex items-center justify-between">

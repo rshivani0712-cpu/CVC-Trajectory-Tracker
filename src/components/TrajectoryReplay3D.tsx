@@ -3,12 +3,14 @@ import * as THREE from 'three';
 import { Play, Pause, RotateCcw, FastForward, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 interface TrajectoryReplay3DProps {
+  sessionId?: string;
   traineeName?: string;
   entryPitchDeg?: number;
   flagged?: boolean;
 }
 
 export const TrajectoryReplay3D: React.FC<TrajectoryReplay3DProps> = ({
+  sessionId,
   traineeName = 'Dr. K. Chen',
   entryPitchDeg = 49.2,
   flagged = true,
@@ -26,6 +28,32 @@ export const TrajectoryReplay3D: React.FC<TrajectoryReplay3DProps> = ({
   scrubProgressRef.current = scrubProgress;
 
   const needleMeshRef = useRef<THREE.Group | null>(null);
+  
+  const [trajectoryPoints, setTrajectoryPoints] = useState<THREE.Vector3[] | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    
+    let isMounted = true;
+    const fetchTrajectory = async () => {
+      try {
+        const { apiRequest } = await import('../api/client');
+        const records = await apiRequest<any[]>(`/api/sessions/${sessionId}/trajectory_records`);
+        if (isMounted && Array.isArray(records) && records.length > 1) {
+          // Check if records actually have coordinates (ignore if 0,0,0 fallback)
+          if (records.some(r => r.pos_x !== 0 || r.pos_y !== 0 || r.pos_z !== 0)) {
+            const points = records.map(r => new THREE.Vector3(r.pos_x, r.pos_y, r.pos_z));
+            setTrajectoryPoints(points);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch trajectory records", e);
+      }
+    };
+    fetchTrajectory();
+    
+    return () => { isMounted = false; };
+  }, [sessionId]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -107,7 +135,7 @@ export const TrajectoryReplay3D: React.FC<TrajectoryReplay3DProps> = ({
     scene.add(idealTube);
 
     // 5. Trainee's Deviant Path (Red/Coral - 49.2° steep attack approaching danger envelope)
-    const traineePoints = [
+    const traineePoints = trajectoryPoints || [
       new THREE.Vector3(12, 28, 8),
       new THREE.Vector3(7, 16, 4),
       new THREE.Vector3(3, 4, -1),
@@ -180,7 +208,7 @@ export const TrajectoryReplay3D: React.FC<TrajectoryReplay3DProps> = ({
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
     };
-  }, []);
+  }, [trajectoryPoints]);
 
   return (
     <div className="w-full h-full flex flex-col glass-hud rounded-2xl p-4 border border-white/10 shadow-2xl relative overflow-hidden">

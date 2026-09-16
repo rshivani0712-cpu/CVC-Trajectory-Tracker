@@ -40,6 +40,9 @@ export const TraineesPage: React.FC<TraineesPageProps> = ({
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Delete Trainee
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Filters & Sorting
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -69,6 +72,23 @@ export const TraineesPage: React.FC<TraineesPageProps> = ({
         sortOrder,
       };
       const data = await dataService.getTrainees(options);
+      
+      // Try to enrich with real presence data from backend
+      try {
+        const { apiRequest } = await import('../api/client');
+        const dbUsers = await apiRequest<any[]>('/api/users');
+        if (Array.isArray(dbUsers)) {
+          const userMap = new Map(dbUsers.map(u => [u.id, u.last_active_at]));
+          data.forEach(t => {
+            if (userMap.has(t.id)) {
+              t.lastActiveAt = userMap.get(t.id);
+            }
+          });
+        }
+      } catch (err) {
+        // Fallback to mock behavior if backend is unavailable
+      }
+      
       setTrainees(data);
     } catch (err) {
       setErrorMessage('Failed to load trainee directory. Please verify connection.');
@@ -101,6 +121,27 @@ export const TraineesPage: React.FC<TraineesPageProps> = ({
     setPerformanceFilter('all');
     setSortBy('score');
     setSortOrder('desc');
+  };
+
+  const handleDeleteTrainee = async (e: React.MouseEvent, traineeId: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to permanently delete this trainee? This action cannot be undone and will delete all their sessions and records.")) {
+      return;
+    }
+    
+    try {
+      setIsDeleting(traineeId);
+      // Backend call
+      const { deleteUser } = await import('../api/auth');
+      await deleteUser(traineeId);
+      
+      // Update local state
+      setTrainees(prev => prev.filter(t => t.id !== traineeId));
+    } catch (err: any) {
+      alert(`Failed to delete trainee: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
   // If a session is being actively reviewed from here
@@ -612,9 +653,34 @@ export const TraineesPage: React.FC<TraineesPageProps> = ({
                       </span>
                     </td>
 
-                    {/* Last Session */}
-                    <td className="py-3.5 px-4 text-white/60 text-[11px] whitespace-nowrap">
-                      {trainee.lastSessionDate}
+                    {/* Last Session / Online Status */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {(() => {
+                        if (!trainee.lastActiveAt) {
+                          return <span className="text-white/60 text-[11px]">{trainee.lastSessionDate}</span>;
+                        }
+                        
+                        const lastActive = new Date(trainee.lastActiveAt);
+                        const diffMins = Math.floor((Date.now() - lastActive.getTime()) / 60000);
+                        
+                        if (diffMins < 5) {
+                          return (
+                            <div className="flex items-center space-x-1.5 text-[11px] font-bold text-emerald-400">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                              <span>Online</span>
+                            </div>
+                          );
+                        } else if (diffMins < 60) {
+                          return <span className="text-white/60 text-[11px]">Last online: {diffMins}m ago</span>;
+                        } else {
+                          const diffHrs = Math.floor(diffMins / 60);
+                          if (diffHrs < 24) {
+                            return <span className="text-white/60 text-[11px]">Last online: {diffHrs}h ago</span>;
+                          } else {
+                            return <span className="text-white/60 text-[11px]">{trainee.lastSessionDate}</span>;
+                          }
+                        }
+                      })()}
                     </td>
 
                     {/* Performance Level */}
@@ -644,16 +710,26 @@ export const TraineesPage: React.FC<TraineesPageProps> = ({
 
                     {/* Action */}
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectTrainee(trainee);
-                        }}
-                        className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] font-semibold inline-flex items-center space-x-1 transition cursor-pointer"
-                      >
-                        <span>Dossier</span>
-                        <ChevronRight className="w-3 h-3 text-cvc-cyan" />
-                      </button>
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={(e) => handleDeleteTrainee(e, trainee.id)}
+                          disabled={isDeleting === trainee.id}
+                          className="px-2.5 py-1 rounded bg-white/5 hover:bg-red-500/20 text-white/50 hover:text-cvc-crimson text-[10px] font-semibold transition cursor-pointer border border-transparent hover:border-red-500/30"
+                          title="Delete Trainee Data"
+                        >
+                          {isDeleting === trainee.id ? '...' : 'Del'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectTrainee(trainee);
+                          }}
+                          className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] font-semibold inline-flex items-center space-x-1 transition cursor-pointer"
+                        >
+                          <span>Dossier</span>
+                          <ChevronRight className="w-3 h-3 text-cvc-cyan" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

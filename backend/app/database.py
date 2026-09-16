@@ -1,8 +1,11 @@
 import os
+import sys
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-
-import sys
 from sqlalchemy.pool import StaticPool
 
 # Default to a local PostgreSQL instance for development
@@ -12,7 +15,7 @@ if "unittest" in sys.modules:
 else:
     SQLALCHEMY_DATABASE_URL = os.getenv(
         "DATABASE_URL", 
-        "postgresql://postgres:password@localhost:5432/cvc_simulator"
+        "postgresql://postgres:123@localhost:5432/cvc_simulator"
     )
 
 # Connect args and poolclass needed if falling back or explicitly using sqlite (for testing)

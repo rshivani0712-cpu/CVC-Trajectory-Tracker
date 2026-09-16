@@ -146,9 +146,9 @@ export function computePerformanceAnalytics(customSessions?: SessionResult[]): P
   // 11. Patient-Profile Performance
   const profiles = [
     { id: 'p1', name: 'High BMI (Adiposity)', diff: 'High' },
-    { id: 'p2', name: 'Lean Male (Standard)', diff: 'Standard' },
+    { id: 'p2', name: 'Slender Male (Standard)', diff: 'Standard' },
     { id: 'p3', name: 'Female High Adipose', diff: 'Complex' },
-    { id: 'p4', name: 'Skinny Female (Shallow)', diff: 'Sensitive' },
+    { id: 'p4', name: 'Slender Female (Shallow)', diff: 'Sensitive' },
     { id: 'p5', name: 'Adolescent (Thin Neck)', diff: 'Critical' },
   ];
   const patientProfilePerformance = profiles.map((p) => {

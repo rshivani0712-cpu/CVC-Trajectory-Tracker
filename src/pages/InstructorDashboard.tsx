@@ -250,7 +250,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               {/* Patient Cohort Columns with Resident Data Points */}
               {[
                 { name: 'Pt 01 (Elevated BMI)', angle: 42.1, isOutlier: false, resident: 'Alexeev 42°' },
-                { name: 'Pt 02 (Lean Male)', angle: 37.5, isOutlier: false, resident: 'Thorne 37°' },
+                { name: 'Pt 02 (Slender Male)', angle: 37.5, isOutlier: false, resident: 'Thorne 37°' },
                 { name: 'Pt 03 (High Adiposity)', angle: 44.0, isOutlier: false, resident: 'Gomez 44°' },
                 { name: 'Pt 04 (Slender Female)', angle: 34.2, isOutlier: false, resident: 'Patel 34°' },
                 { name: 'Pt 05 (Adolescent)', angle: 49.2, isOutlier: true, resident: 'Chen 49.2° [BREACH]' },
@@ -597,6 +597,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <X className="w-5 h-5" />
             </button>
             <TrajectoryReplay3D
+              sessionId={currentAudit.id}
               traineeName={currentAudit.traineeName || 'Trainee'}
               entryPitchDeg={currentAudit.entryPitchDeg || 45}
               flagged={currentAudit.flagged}

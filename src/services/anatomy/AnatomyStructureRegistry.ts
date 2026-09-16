@@ -86,6 +86,7 @@ export interface SiteAnatomyDefinition {
   neutralYawDeg: number;
   pitchRangeDeg: [number, number];
   yawRangeDeg: [number, number];
+  maxDepthMm: number;
   /** Camera framing preset in meters */
   camera: {
     lookAt: [number, number, number];
@@ -136,8 +137,9 @@ export const SITE_DEFINITIONS: Record<'neck' | 'chest' | 'arm' | 'groin', SiteAn
     entryPointMeters: [-0.0240, 1.4460, 0.0420],
     neutralPitchDeg: 40.0,
     neutralYawDeg: 4.5,
-    pitchRangeDeg: [24.0, 56.0],
-    yawRangeDeg: [-3.0, 15.0],
+    pitchRangeDeg: [35, 60],
+    yawRangeDeg: [-5, 15],
+    maxDepthMm: 45.0,
     camera: {
       lookAt: [-0.020, 1.435, 0.020],
       radiusMeters: 0.38,
@@ -178,6 +180,7 @@ export const SITE_DEFINITIONS: Record<'neck' | 'chest' | 'arm' | 'groin', SiteAn
     neutralYawDeg: 5.5,
     pitchRangeDeg: [18.0, 48.0],
     yawRangeDeg: [-4.0, 16.0],
+    maxDepthMm: 50.0,
     camera: {
       lookAt: [-0.045, 1.410, 0.020],
       radiusMeters: 0.42,
@@ -212,9 +215,10 @@ export const SITE_DEFINITIONS: Record<'neck' | 'chest' | 'arm' | 'groin', SiteAn
     essentialChunks: [8, 3, 10],
     entryPointMeters: [-0.2050, 1.1100, 0.0150],
     neutralPitchDeg: 24.0,
-    neutralYawDeg: 3.0,
-    pitchRangeDeg: [15.0, 40.0],
-    yawRangeDeg: [-5.0, 12.0],
+    neutralYawDeg: -10.0,
+    pitchRangeDeg: [10, 45],
+    yawRangeDeg: [-25, 5],
+    maxDepthMm: 60.0,
     camera: {
       lookAt: [-0.190, 1.150, -0.010],
       radiusMeters: 0.36,
@@ -253,6 +257,7 @@ export const SITE_DEFINITIONS: Record<'neck' | 'chest' | 'arm' | 'groin', SiteAn
     neutralYawDeg: 2.0,
     pitchRangeDeg: [28.0, 56.0],
     yawRangeDeg: [-6.0, 14.0],
+    maxDepthMm: 55.0,
     camera: {
       lookAt: [-0.052, 0.725, 0.020],
       radiusMeters: 0.40,

@@ -39,8 +39,17 @@ def run_verification():
     env["DATABASE_URL"] = "sqlite:///./e2e_test.db"
     
     # Cleanup previous db if exists
+    db_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "e2e_test.db")
+    if os.path.exists(db_file):
+        try:
+            os.remove(db_file)
+        except OSError:
+            pass
     if os.path.exists("e2e_test.db"):
-        os.remove("e2e_test.db")
+        try:
+            os.remove("e2e_test.db")
+        except OSError:
+            pass
         
     # Start the server
     process = subprocess.Popen(
@@ -86,7 +95,7 @@ def run_verification():
 
         print("\n--- Verifying Session Creation & Authorization ---")
         status, res = make_request("POST", "http://127.0.0.1:8000/api/sessions", token=trainee_token)
-        assert status == 200 and "session_id" in res, f"Session creation failed: {res}"
+        assert status in [200, 201] and "session_id" in res, f"Session creation failed: {res}"
         session_id = res["session_id"]
         print("Session creation PASS")
 

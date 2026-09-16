@@ -160,6 +160,7 @@ export interface Trainee {
   lastSessionDate: string;
   performanceLevel: 'PROFICIENT' | 'COMPETENT' | 'NEEDS_REMEDIATION';
   flaggedSessionsCount: number;
+  lastActiveAt?: string;
 }
 
 export interface CohortStats {

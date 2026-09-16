@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Backend generated files
+backend/.vscode/
+backend/**/__pycache__/
+backend/e2e_test.db

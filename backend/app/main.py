@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from typing import List, Optional
 from datetime import timedelta
 
 from .models import TrajectoryAnalyzeRequest, TrajectoryAnalyzeResponse, UserCreate, UserResponse, Token, PatientResponse, AccessSiteResponse, TrainingConfigurationRequest, TrainingConfigurationResponse, SessionCreateRequest
@@ -239,13 +240,19 @@ def analyze_trajectory(request: TrajectoryAnalyzeRequest):
 # --- Session Management Endpoints ---
 
 @app.post("/api/sessions", status_code=201)
-def start_session(request: SessionCreateRequest, db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.RequireRole(["trainee", "instructor", "admin"]))):
+def start_session(request: Optional[SessionCreateRequest] = None, db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.RequireRole(["trainee", "instructor", "admin"]))):
     """Initialize a new simulation training session with a specific patient and access site."""
-    patient = db.query(db_models.Patient).filter(db_models.Patient.patient_id == request.patient_id).first()
+    if db.query(db_models.Patient).count() == 0 or db.query(db_models.AccessSite).count() == 0:
+        startup_event()
+
+    req_patient_id = (request.patient_id if request and request.patient_id is not None else None) or "patient_001"
+    req_site_id = (request.access_site_id if request and request.access_site_id is not None else None) or "site_001"
+
+    patient = db.query(db_models.Patient).filter(db_models.Patient.patient_id == req_patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
-    site = db.query(db_models.AccessSite).filter(db_models.AccessSite.access_site_id == request.access_site_id).first()
+    site = db.query(db_models.AccessSite).filter(db_models.AccessSite.access_site_id == req_site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="Access site not found")
         
@@ -255,8 +262,8 @@ def start_session(request: SessionCreateRequest, db: Session = Depends(get_db), 
     session = create_session(
         db, 
         user_id=current_user.id,
-        patient_id=request.patient_id,
-        access_site_id=request.access_site_id,
+        patient_id=req_patient_id,
+        access_site_id=req_site_id,
         training_configuration=config_json
     )
     return {
@@ -395,6 +402,9 @@ def add_trajectory_to_session(session_id: str, request: TrajectoryAnalyzeRequest
         pitch=response.pitch,
         yaw=response.yaw,
         depth=response.depth,
+        pos_x=request.position.x,
+        pos_y=request.position.y,
+        pos_z=request.position.z,
         vessel_distance_target=response.distance_to_target,
         vessel_distance_danger=response.distance_to_danger,
         deviation=response.deviation,
@@ -430,9 +440,69 @@ def get_ai_analysis(session_id: str, db: Session = Depends(get_db), current_user
     
     return analysis
 
-# --- Patient Endpoints ---
+@app.get("/api/sessions/{session_id}/trajectory_records")
+def get_trajectory_records(session_id: str, db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.get_current_user)):
+    session = get_session(db, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    if current_user.role == "trainee" and session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this session")
+        
+    records = db.query(db_models.TrajectoryRecord).filter(db_models.TrajectoryRecord.session_id == session_id).order_by(db_models.TrajectoryRecord.timestamp).all()
+    
+    return [
+        {
+            "id": r.id,
+            "timestamp": r.timestamp.isoformat(),
+            "pitch": r.pitch,
+            "yaw": r.yaw,
+            "depth": r.depth,
+            "pos_x": r.pos_x,
+            "pos_y": r.pos_y,
+            "pos_z": r.pos_z,
+            "status": r.status
+        } for r in records
+    ]
 
-from typing import List
+# --- User Endpoints ---
+
+@app.get("/api/users", response_model=List[UserResponse])
+def get_users(db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.get_current_user)):
+    """Only admins and instructors can list all users."""
+    if current_user.role not in ["admin", "instructor"]:
+        raise HTTPException(status_code=403, detail="Not enough privileges")
+    return db.query(db_models.User).all()
+
+@app.post("/api/auth/heartbeat")
+def heartbeat(db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.get_current_user)):
+    """Update last active timestamp for the current user."""
+    from datetime import datetime
+    current_user.last_active_at = datetime.utcnow()
+    db.commit()
+    return {"status": "ok"}
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: str, db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.get_current_user)):
+    """Delete a user. Instructors can only delete trainees. Admins can delete anyone except themselves."""
+    if current_user.role not in ["admin", "instructor"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete users")
+        
+    user_to_delete = db.query(db_models.User).filter(db_models.User.id == user_id).first()
+    if not user_to_delete:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        
+    if current_user.role == "instructor" and user_to_delete.role != "trainee":
+        raise HTTPException(status_code=403, detail="Instructors can only delete trainee accounts")
+        
+    db.delete(user_to_delete)
+    db.commit()
+    return {"status": "deleted"}
+
+# --- Patient Endpoints ---
 
 @app.get("/api/patients", response_model=List[PatientResponse])
 def list_patients(db: Session = Depends(get_db), current_user: db_models.User = Depends(auth.get_current_user)):

@@ -132,7 +132,7 @@ export const TraineeDashboard: React.FC<TraineeDashboardProps> = ({
               {[
                 { key: 'all', label: 'All Patient Cohorts (5)' },
                 { key: 'adiposity', label: 'Challenging Adiposity (2)' },
-                { key: 'standard', label: 'Standard Lean (2)' },
+                { key: 'standard', label: 'Standard Slender (2)' },
                 { key: 'adolescent', label: 'Adolescent Geometry (1)' },
               ].map((tab) => (
                 <button

@@ -101,7 +101,7 @@ export class AnatomySceneManager {
 
     // 2. Camera
     this.camera = new THREE.PerspectiveCamera(40, width / height, 0.01, 10.0);
-    this.cameraTarget.set(...this.siteDef.camera.lookAt);
+    this.cameraTarget.set(...this.siteDef.camera.lookAt).multiply(this.getPatientScaleVector());
     this.cameraSpherical = {
       radius: this.siteDef.camera.radiusMeters,
       theta: this.siteDef.camera.theta,
@@ -165,20 +165,25 @@ export class AnatomySceneManager {
     this.scene.add(specularFill);
   }
 
-  /**
-   * Scales anatomy root group based on patient body type (Fat vs Skinny vs Adolescent)
-   */
-  private applyPatientScaling(): void {
+  private getPatientScaleVector(): THREE.Vector3 {
     const profile = this.patient.anatomicalProfile;
     const overallScale = profile?.overallScale ?? 1.0;
     const widthScale = profile?.neckWidthScale ?? 1.0;
     const depthScale = profile?.neckDepthScale ?? 1.0;
-
-    this.anatomyGroup.scale.set(
+    return new THREE.Vector3(
       widthScale * overallScale,
       overallScale,
       depthScale * overallScale
     );
+  }
+
+  /**
+   * Scales anatomy root group based on patient body type (Obese vs Slender vs Adolescent)
+   */
+  private applyPatientScaling(): void {
+    const scale = this.getPatientScaleVector();
+
+    this.anatomyGroup.scale.copy(scale);
   }
 
   /**
@@ -415,7 +420,7 @@ export class AnatomySceneManager {
     needlePivot.add(plunger);
 
     // Initial position at skin entry point
-    const entry = new THREE.Vector3(...this.siteDef.entryPointMeters);
+    const entry = new THREE.Vector3(...this.siteDef.entryPointMeters).multiply(this.getPatientScaleVector());
     needlePivot.position.copy(entry);
     this.needleGroup.add(needlePivot);
 
@@ -427,6 +432,9 @@ export class AnatomySceneManager {
    */
   private buildEvaluationMarkers(): void {
     this.revealGroup.clear();
+
+    const scale = this.getPatientScaleVector();
+    const avgScale = (scale.x + scale.y + scale.z) / 3.0;
 
     // 1. Target vessel green acceptance ring
     const targetRingGeom = new THREE.RingGeometry(
@@ -441,8 +449,9 @@ export class AnatomySceneManager {
       opacity: 0.9,
     });
     this.targetEvaluationRing = new THREE.Mesh(targetRingGeom, targetRingMat);
-    this.targetEvaluationRing.position.set(...this.siteDef.targetStructure.center);
-    this.targetEvaluationRing.lookAt(new THREE.Vector3(...this.siteDef.entryPointMeters));
+    this.targetEvaluationRing.scale.setScalar(avgScale);
+    this.targetEvaluationRing.position.set(...this.siteDef.targetStructure.center).multiply(scale);
+    this.targetEvaluationRing.lookAt(new THREE.Vector3(...this.siteDef.entryPointMeters).multiply(scale));
     this.revealGroup.add(this.targetEvaluationRing);
 
     // 2. Danger structure warning ring (Carotid / Subclavian Artery)
@@ -458,14 +467,15 @@ export class AnatomySceneManager {
       opacity: 0.9,
     });
     this.dangerEvaluationRing = new THREE.Mesh(dangerRingGeom, dangerRingMat);
-    this.dangerEvaluationRing.position.set(...this.siteDef.dangerStructure.center);
-    this.dangerEvaluationRing.lookAt(new THREE.Vector3(...this.siteDef.entryPointMeters));
+    this.dangerEvaluationRing.scale.setScalar(avgScale);
+    this.dangerEvaluationRing.position.set(...this.siteDef.dangerStructure.center).multiply(scale);
+    this.dangerEvaluationRing.lookAt(new THREE.Vector3(...this.siteDef.entryPointMeters).multiply(scale));
     this.revealGroup.add(this.dangerEvaluationRing);
 
     // 3. Ideal reference trajectory dashed line
     const idealGeom = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(...this.siteDef.entryPointMeters),
-      new THREE.Vector3(...this.siteDef.targetStructure.center),
+      new THREE.Vector3(...this.siteDef.entryPointMeters).multiply(scale),
+      new THREE.Vector3(...this.siteDef.targetStructure.center).multiply(scale),
     ]);
     const idealMat = new THREE.LineDashedMaterial({
       color: 0x06b6d4,
@@ -561,7 +571,7 @@ export class AnatomySceneManager {
     const dir = new THREE.Vector3(0, 0, -1).applyEuler(pivot.rotation).normalize();
 
     // Entry point in meters
-    const entry = new THREE.Vector3(...this.siteDef.entryPointMeters);
+    const entry = new THREE.Vector3(...this.siteDef.entryPointMeters).multiply(this.getPatientScaleVector());
 
     // Tip position: entry + dir * (depth in meters)
     const depthMeters = this.currentDepthMm / 1000;
@@ -585,9 +595,10 @@ export class AnatomySceneManager {
    * ZERO Math.random() calls.
    */
   public calculateDeterministicTelemetry(): LiveTelemetry {
-    const entry = new THREE.Vector3(...this.siteDef.entryPointMeters);
-    const target = new THREE.Vector3(...this.siteDef.targetStructure.center);
-    const danger = new THREE.Vector3(...this.siteDef.dangerStructure.center);
+    const scale = this.getPatientScaleVector();
+    const entry = new THREE.Vector3(...this.siteDef.entryPointMeters).multiply(scale);
+    const target = new THREE.Vector3(...this.siteDef.targetStructure.center).multiply(scale);
+    const danger = new THREE.Vector3(...this.siteDef.dangerStructure.center).multiply(scale);
 
     // Target vessel proximity (mm)
     const vesselDistanceMm = Number((this.needleTipPos.distanceTo(target) * 1000).toFixed(1));
@@ -673,7 +684,8 @@ export class AnatomySceneManager {
    */
   public setViewPreset(preset: '3d' | 'trans' | 'sagit' | 'coron'): void {
     this.activeViewPreset = preset;
-    const center = this.siteDef.camera.lookAt;
+    const scale = this.getPatientScaleVector();
+    const center = new THREE.Vector3(...this.siteDef.camera.lookAt).multiply(scale);
     const r = this.siteDef.camera.radiusMeters;
 
     switch (preset) {
@@ -745,7 +757,7 @@ export class AnatomySceneManager {
   public switchSite(site: AnatomicalSite): void {
     this.selectedSite = site;
     this.siteDef = SITE_DEFINITIONS[site.category || 'neck'];
-    this.cameraTarget.set(...this.siteDef.camera.lookAt);
+    this.cameraTarget.set(...this.siteDef.camera.lookAt).multiply(this.getPatientScaleVector());
     this.cameraSpherical = {
       radius: this.siteDef.camera.radiusMeters,
       theta: this.siteDef.camera.theta,
@@ -764,6 +776,10 @@ export class AnatomySceneManager {
   public switchPatient(patient: PatientBodyType): void {
     this.patient = patient;
     this.applyPatientScaling();
+    
+    this.cameraTarget.set(...this.siteDef.camera.lookAt).multiply(this.getPatientScaleVector());
+    this.updateCameraPosition();
+    
     this.buildNeedleAssembly();
     this.buildEvaluationMarkers();
   }

@@ -15,6 +15,7 @@ export async function sendSessionTrajectory(
         entry_angle: telemetry.entryAngle,
         entryAngle: telemetry.entryAngle,
         velocity: telemetry.velocity,
+        position: telemetry.coordinates,
         coordinates: telemetry.coordinates,
         timestamp: Date.now(),
       }),
@@ -34,12 +35,12 @@ export async function sendSessionTrajectory(
       yaw: Number(res.yaw ?? telemetry.yaw),
       depth: Number(res.depth ?? telemetry.depth),
       trajectoryDeviation: Number(res.deviation ?? res.trajectory_deviation ?? res.trajectoryDeviation ?? telemetry.trajectoryDeviation),
-      vesselDistance: Number(res.vessel_distance ?? res.vesselDistance ?? telemetry.vesselDistance),
-      carotidDistance: Number(res.carotid_distance ?? res.carotidDistance ?? telemetry.carotidDistance),
+      vesselDistance: Number(res.distance_to_target ?? res.vessel_distance ?? res.vesselDistance ?? telemetry.vesselDistance),
+      carotidDistance: Number(res.distance_to_danger ?? res.carotid_distance ?? res.carotidDistance ?? telemetry.carotidDistance),
       trainingScore: Number(res.score ?? res.training_score ?? res.trainingScore ?? telemetry.trainingScore),
       coplanarity: Number(res.coplanarity ?? res.coplanarity_percent ?? telemetry.coplanarity),
       status: backendStatus,
-      statusMessage: res.status_message || res.statusMessage || res.message || telemetry.statusMessage,
+      statusMessage: res.feedback || res.status_message || res.statusMessage || res.message || telemetry.statusMessage,
     };
   } catch (err) {
     // Return the local evaluated telemetry when offline/fallback

@@ -244,3 +244,15 @@ export function logoutUser() {
   localStorage.removeItem('cvc_auth_token');
   localStorage.removeItem('cvc_current_user');
 }
+
+export async function deleteUser(userId: string): Promise<void> {
+  await apiRequest(`/api/users/${userId}`, { method: 'DELETE' });
+}
+
+export async function sendHeartbeat(): Promise<void> {
+  try {
+    await apiRequest('/api/auth/heartbeat', { method: 'POST' });
+  } catch (err) {
+    // Ignore heartbeat failures to avoid spamming the console
+  }
+}

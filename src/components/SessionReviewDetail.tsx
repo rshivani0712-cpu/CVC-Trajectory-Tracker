@@ -188,6 +188,7 @@ export const SessionReviewDetail: React.FC<SessionReviewDetailProps> = ({
         <div className="lg:col-span-7 space-y-4">
           <div className="glass-hud rounded-3xl p-4 border border-white/10 h-[480px] flex flex-col">
             <TrajectoryReplay3D
+              sessionId={session.id}
               traineeName={session.traineeName}
               entryPitchDeg={session.entryPitchDeg}
               flagged={session.flagged}

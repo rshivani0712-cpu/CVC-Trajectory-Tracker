@@ -15,8 +15,9 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="trainee") # trainee, instructor, admin
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_active_at = Column(DateTime, default=datetime.utcnow)
 
-    sessions = relationship("TrainingSession", back_populates="user")
+    sessions = relationship("TrainingSession", back_populates="user", cascade="all, delete-orphan")
 
 class TrainingSession(Base):
     __tablename__ = "training_sessions"
@@ -32,7 +33,7 @@ class TrainingSession(Base):
     final_score = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="sessions")
-    records = relationship("TrajectoryRecord", back_populates="session", order_by="TrajectoryRecord.timestamp")
+    records = relationship("TrajectoryRecord", back_populates="session", cascade="all, delete-orphan", order_by="TrajectoryRecord.timestamp")
 
 class TrajectoryRecord(Base):
     __tablename__ = "trajectory_records"
@@ -44,6 +45,9 @@ class TrajectoryRecord(Base):
     pitch = Column(Float)
     yaw = Column(Float)
     depth = Column(Float)
+    pos_x = Column(Float, nullable=True)
+    pos_y = Column(Float, nullable=True)
+    pos_z = Column(Float, nullable=True)
     vessel_distance_target = Column(Float)
     vessel_distance_danger = Column(Float)
     deviation = Column(Float)

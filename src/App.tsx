@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, UserRole, PatientBodyType, AnatomicalSite, SessionResult } from './types';
-import { getAuthenticatedUser, setCurrentUser, logoutUser } from './api/auth';
+import { getAuthenticatedUser, setCurrentUser, logoutUser, sendHeartbeat } from './api/auth';
 import { PATIENT_PROFILES, ANATOMICAL_SITES, MOCK_SESSIONS } from './api/sessions';
 import { NavigationHeader } from './components/NavigationHeader';
 import { LoginPage } from './pages/LoginPage';
@@ -39,6 +39,21 @@ export default function App() {
 
   // Admin active tab
   const [adminTab, setAdminTab] = useState<string>('hardware');
+
+  // Background Heartbeat for Presence Tracking
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Send immediately on login/mount
+    sendHeartbeat();
+    
+    // Poll every 60 seconds
+    const intervalId = setInterval(() => {
+      sendHeartbeat();
+    }, 60000);
+    
+    return () => clearInterval(intervalId);
+  }, [currentUser]);
 
   // Secure Route Protection Handler
   const handleNavigatePage = (targetPage: string) => {
